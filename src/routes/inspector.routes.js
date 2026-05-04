@@ -1,0 +1,19 @@
+const router = require('express').Router();
+const { auth } = require('../middleware/auth.middleware');
+const { requireRoles } = require('../middleware/role.middleware');
+const asyncHandler = require('../utils/asyncHandler');
+const inspector = require('../controllers/inspectorBooking.controller');
+const inspectorProfile = require('../controllers/inspectorProfile.controller');
+const upload = require('../controllers/upload.controller');
+const { uploadPhotos } = require('../middleware/upload.middleware');
+
+router.use(auth, requireRoles('inspector'));
+router.get('/profile', asyncHandler(inspectorProfile.getProfile));
+router.patch('/profile', asyncHandler(inspectorProfile.patchProfile));
+router.get('/tasks', asyncHandler(inspector.tasks));
+router.post('/location', asyncHandler(inspector.updateLiveLocation));
+router.patch('/bookings/:bookingNumber', asyncHandler(inspector.patchBookingDetails));
+router.get('/bookings/:bookingNumber', asyncHandler(inspector.get));
+router.post('/bookings/:bookingNumber/photos', uploadPhotos, asyncHandler(upload.uploadPhotos));
+router.post('/bookings/:bookingNumber/submit', asyncHandler(inspector.submit));
+module.exports = router;

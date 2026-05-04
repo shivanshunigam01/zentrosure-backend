@@ -1,0 +1,78 @@
+const mongoose = require('mongoose');
+
+const CHECKLIST_FIELD = new mongoose.Schema({
+  id: String,
+  label: String,
+  instructions: String,
+  required: { type: Boolean, default: false },
+  minPhotos: { type: Number, default: 0 }
+}, { _id: false });
+
+const CAPTURED_IMAGE = new mongoose.Schema({
+  storageUrl: String,
+  dataUrl: String,
+  capturedAt: Date,
+  latitude: Number,
+  longitude: Number,
+  address: String,
+  fieldId: String,
+  originalName: String,
+  mimeType: String,
+  size: Number
+}, { _id: false });
+
+const FIELD_SUBMISSION = new mongoose.Schema({
+  fieldId: String,
+  images: [CAPTURED_IMAGE],
+  notes: String
+}, { _id: false });
+
+const INSPECTOR_SUBMISSION = new mongoose.Schema({
+  submittedAt: Date,
+  inspectorId: { type: mongoose.Schema.Types.ObjectId, ref: 'Inspector' },
+  inspectorName: String,
+  fields: [FIELD_SUBMISSION],
+  overallNotes: String
+}, { _id: false });
+
+const REPORT_DATA = new mongoose.Schema({
+  reportId: { type: String, index: true },
+  publishedAt: Date,
+  score: Number,
+  verdict: String,
+  adminNotes: String,
+  highlights: [String]
+}, { _id: false });
+
+const bookingSchema = new mongoose.Schema({
+  bookingNumber: { type: String, required: true, unique: true, index: true },
+  customerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  customerName: String,
+  phone: String,
+  serviceSlug: { type: String, required: true, index: true },
+  vehicleDescription: { type: String, required: true },
+  city: { type: String, required: true, index: true },
+  scheduledDate: { type: Date, required: true },
+  slot: String,
+  address: String,
+  /** Customer inspection site — set when address saved with GPS (for on-site verification). */
+  addressLatitude: Number,
+  addressLongitude: Number,
+  /** Set when an inspector upload GPS position is within radius of addressLatitude/Longitude. */
+  visitVerifiedAt: Date,
+  amount: { type: Number, default: 0 },
+  paymentStatus: { type: String, enum: ['pending', 'paid', 'refunded'], default: 'pending' },
+  status: {
+    type: String,
+    enum: ['Pending', 'Assigned', 'Awaiting Inspector', 'Submitted for Review', 'Sent Back', 'Verified', 'Report Published', 'Cancelled'],
+    default: 'Pending', index: true
+  },
+  inspectorId: { type: mongoose.Schema.Types.ObjectId, ref: 'Inspector' },
+  checklist: [CHECKLIST_FIELD],
+  uploadedImages: [CAPTURED_IMAGE],
+  submission: INSPECTOR_SUBMISSION,
+  report: REPORT_DATA,
+  history: [{ at: { type: Date, default: Date.now }, event: String, meta: mongoose.Schema.Types.Mixed }]
+}, { timestamps: true });
+
+module.exports = mongoose.model('Booking', bookingSchema);
