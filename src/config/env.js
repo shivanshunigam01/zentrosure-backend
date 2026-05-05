@@ -9,6 +9,14 @@ if (missing.length) {
 
 module.exports = {
   nodeEnv: process.env.NODE_ENV || 'development',
+  trustProxy:
+    process.env.TRUST_PROXY !== undefined
+      ? (process.env.TRUST_PROXY === 'true' || process.env.TRUST_PROXY === '1'
+        ? 1
+        : process.env.TRUST_PROXY === 'false' || process.env.TRUST_PROXY === '0'
+          ? false
+          : process.env.TRUST_PROXY)
+      : (process.env.NODE_ENV === 'production' ? 1 : false),
   port: process.env.PORT || 5000,
   apiPrefix: process.env.API_PREFIX || '/v1',
   mongoUri: process.env.MONGO_URI,

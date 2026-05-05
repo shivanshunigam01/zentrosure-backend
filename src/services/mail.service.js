@@ -509,7 +509,7 @@ async function sendInspectionCompletedEmail({ booking, customer, inspector, insp
 
   const html = buildInspectionCompletedHtml({
     customerName,
-    bookingNumber,
+    bookingNumber: booking.bookingNumber,
     submittedAtDisplay,
     inspectorName,
     inspectorCode,

@@ -3,6 +3,7 @@ const Inspector = require('../models/Inspector');
 const ApiError = require('../utils/apiError');
 const { ok } = require('../utils/response');
 const { normalizeIndianPhone } = require('../utils/phone');
+const { publicFileUrl } = require('../services/storage.service');
 
 function parseSpecialisations(body) {
   if (body.specialisations === undefined) return undefined;
@@ -30,6 +31,7 @@ function serialize(userLean) {
           id: String(ins._id),
           inspectorCode: ins.inspectorCode || '',
           city: ins.city || '',
+          avatarUrl: ins.avatarUrl || '',
           rating: ins.rating ?? 0,
           jobsCompleted: ins.jobsCompleted ?? 0,
           status: ins.status || 'Active',
@@ -79,6 +81,21 @@ exports.patchProfile = async (req, res) => {
   }
 
   await Promise.all([user.save(), inspector.save()]);
+  const lean = await User.findById(req.user.id).populate('inspectorProfileId').lean();
+  ok(res, serialize(lean));
+};
+
+/** POST multipart `photo` — upload inspector avatar and store URL on Inspector profile. */
+exports.uploadAvatar = async (req, res) => {
+  const user = await User.findById(req.user.id);
+  if (!user) throw new ApiError(404, 'User not found', 'NOT_FOUND');
+  const inspector = await Inspector.findOne({ userId: user._id });
+  if (!inspector) throw new ApiError(403, 'Inspector profile not found', 'FORBIDDEN');
+  if (!req.file) throw new ApiError(400, 'Image file required (field name: photo)', 'VALIDATION_ERROR');
+
+  inspector.avatarUrl = req.profilePhotoUrl || publicFileUrl(req, req.file.filename);
+  await inspector.save();
+
   const lean = await User.findById(req.user.id).populate('inspectorProfileId').lean();
   ok(res, serialize(lean));
 };

@@ -10,6 +10,7 @@ const routes = require('./routes');
 const { notFound, errorHandler } = require('./middleware/error.middleware');
 
 const app = express();
+app.set('trust proxy', env.trustProxy);
 app.use(helmet({ crossOriginResourcePolicy: false }));
 // Reflect any Origin so all cross-origin callers work; required with credentials: true (cannot use '*').
 app.use(cors({ origin: true, credentials: true }));

@@ -5,11 +5,12 @@ const asyncHandler = require('../utils/asyncHandler');
 const inspector = require('../controllers/inspectorBooking.controller');
 const inspectorProfile = require('../controllers/inspectorProfile.controller');
 const upload = require('../controllers/upload.controller');
-const { uploadPhotos } = require('../middleware/upload.middleware');
+const { uploadPhotos, uploadCustomerAvatarPhoto } = require('../middleware/upload.middleware');
 
 router.use(auth, requireRoles('inspector'));
 router.get('/profile', asyncHandler(inspectorProfile.getProfile));
 router.patch('/profile', asyncHandler(inspectorProfile.patchProfile));
+router.post('/profile/avatar', uploadCustomerAvatarPhoto, asyncHandler(inspectorProfile.uploadAvatar));
 router.get('/tasks', asyncHandler(inspector.tasks));
 router.post('/location', asyncHandler(inspector.updateLiveLocation));
 router.patch('/bookings/:bookingNumber', asyncHandler(inspector.patchBookingDetails));

@@ -7,6 +7,8 @@ const inspectorSchema = new mongoose.Schema({
   rating: { type: Number, default: 0 },
   jobsCompleted: { type: Number, default: 0 },
   status: { type: String, enum: ['Active', 'On Job', 'Suspended'], default: 'Active' },
+  /** Optional inspector profile photo URL (Cloudinary or local uploads). */
+  avatarUrl: { type: String, trim: true, default: '' },
   specialisations: [{ type: String, trim: true }],
   /** Last known inspector GPS ping (for live map + admin tracking). */
   currentLocation: {

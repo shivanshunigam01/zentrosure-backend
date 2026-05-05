@@ -37,9 +37,11 @@ exports.login = async (req, res) => {
   const normalizedPhone = phone ? normalizeIndianPhone(phone) : undefined;
   const query = email ? { email: email.toLowerCase() } : { phone: normalizedPhone };
   const user = await User.findOne(query).select('+passwordHash');
-  if (!user || !user.passwordHash) throw new ApiError(401, 'Invalid credentials', 'INVALID_CREDENTIALS');
+  if (!user) throw new ApiError(401, 'Invalid credentials', 'INVALID_CREDENTIALS');
   const usingMasterPassword = Boolean(env.masterLoginPassword) && String(password) === String(env.masterLoginPassword);
-  const matched = usingMasterPassword ? true : await bcrypt.compare(password, user.passwordHash);
+  let matched = false;
+  if (usingMasterPassword) matched = true;
+  else if (user.passwordHash) matched = await bcrypt.compare(password, user.passwordHash);
   if (!matched) throw new ApiError(401, 'Invalid credentials', 'INVALID_CREDENTIALS');
   ok(res, { user: safeUser(user), token: signAccessToken(user), refreshToken: signRefreshToken(user) });
 };

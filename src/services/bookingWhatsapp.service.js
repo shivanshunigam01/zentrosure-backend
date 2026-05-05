@@ -361,6 +361,26 @@ async function sendReportPublishedWhatsApp({ booking, customer, report }) {
 
   if (!response.ok) {
     const text = await response.text();
+    const mismatch = response.status === 400 && /template params does not match/i.test(String(text || ''));
+    if (mismatch && reportPublishedIncludeUrlParam) {
+      // Retry once without URL template param for older 3-variable templates.
+      const retryPayload = {
+        ...payload,
+        templateParams: [cleanName, inspectorName, inspectionDateStr],
+        buttons: [{ url: shareUrl }]
+      };
+      const retry = await fetch(baseUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${apiKey}`
+        },
+        body: JSON.stringify(retryPayload)
+      });
+      if (retry.ok) return retry.json().catch(() => ({}));
+      const retryText = await retry.text().catch(() => '');
+      throw new Error(`AiSensy report-published failed: ${retry.status} ${retryText || text}`);
+    }
     throw new Error(`AiSensy report-published failed: ${response.status} ${text}`);
   }
 
