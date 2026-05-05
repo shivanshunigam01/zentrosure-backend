@@ -31,7 +31,7 @@ exports.patchBookingDetails = async (req, res) => {
   const booking = await findBooking(req.params.bookingNumber);
   if (booking.status === 'Cancelled') throw new ApiError(409, 'Cannot edit a cancelled booking', 'INVALID_TRANSITION');
   applyBookingDetailPatch(booking, req.body || {});
-  if (Object.prototype.hasOwnProperty.call(req.body || {}, 'paymentStatus')) {
+  if (Object.hasOwn(req.body || {}, 'paymentStatus')) {
     const nextPaymentStatus = String(req.body.paymentStatus || '').trim().toLowerCase();
     const allowed = ['pending', 'paid', 'refunded'];
     if (!allowed.includes(nextPaymentStatus)) {
