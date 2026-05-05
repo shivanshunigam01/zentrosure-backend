@@ -64,7 +64,7 @@ module.exports = {
       process.env.AISENSY_REPORT_PUBLISHED_INCLUDE_URL_PARAM === undefined ||
       process.env.AISENSY_REPORT_PUBLISHED_INCLUDE_URL_PARAM === 'true' ||
       process.env.AISENSY_REPORT_PUBLISHED_INCLUDE_URL_PARAM === '1',
-    baseUrl: process.env.AISENSY_BASE_URL || 'https://backend.aisensy.com/campaign/t1/api/v2'
+    baseUrl: process.env.AISENSY_BASE_URL || 'https://backend.api-wa.co/campaign/zentroverse-global/api/v2'
   },
   razorpay: {
     keyId: process.env.RAZORPAY_KEY_ID,

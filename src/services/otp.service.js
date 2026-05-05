@@ -5,17 +5,46 @@ const env = require('../config/env');
 
 function generateOtp() { return String(Math.floor(100000 + Math.random() * 900000)); }
 async function sendOtpViaAiSensy(phone, code) {
-  if (!env.aisensy.apiKey || !env.aisensy.campaignName) {
+  const {
+    apiKey,
+    verifyCampaignName,
+    campaignName,
+    verifyUserName,
+    verifySource,
+    baseUrl
+  } = env.aisensy;
+  const selectedCampaign = verifyCampaignName || campaignName;
+  if (!apiKey || !selectedCampaign) {
     console.log(`[DEV OTP] ${phone}: ${code}`);
     return { provider: 'console', sent: true };
   }
-  // Node 18+ supports fetch globally. Payload can be adjusted as per AiSensy campaign variables.
-  const response = await fetch(env.aisensy.baseUrl, {
+
+  const payload = {
+    apiKey,
+    campaignName: selectedCampaign,
+    destination: phone,
+    userName: verifyUserName || 'Zentroverse',
+    templateParams: ['User', code, '10'],
+    source: verifySource || 'new-landing-page form',
+    media: {},
+    buttons: [],
+    carouselCards: [],
+    location: {},
+    attributes: {},
+    paramsFallbackValue: { FirstName: 'User' }
+  };
+
+  // Keep Authorization header for compatibility with existing AiSensy projects.
+  const response = await fetch(baseUrl, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${env.aisensy.apiKey}` },
-    body: JSON.stringify({ campaignName: env.aisensy.campaignName, destination: phone, templateParams: [code] })
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+    body: JSON.stringify(payload)
   });
-  if (!response.ok) throw new Error('AiSensy OTP send failed');
+
+  if (!response.ok) {
+    const text = await response.text().catch(() => '');
+    throw new Error(`AiSensy OTP send failed: ${response.status} ${text}`);
+  }
   return response.json();
 }
 async function createOtpSession(phone, source = 'book-flow') {
