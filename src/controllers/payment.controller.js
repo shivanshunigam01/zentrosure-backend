@@ -15,7 +15,9 @@ function isBookingReadyForPayment(booking) {
 }
 
 exports.createOrder = async (req, res) => {
-  const booking = await Booking.findOne({ bookingNumber: req.body.bookingNumber, customerId: req.user.id });
+  const bookingNumber = String(req.body.bookingNumber || '').trim();
+  if (!bookingNumber) throw new ApiError(400, 'bookingNumber is required', 'VALIDATION_ERROR');
+  const booking = await Booking.findOne({ bookingNumber, customerId: req.user.id });
   if (!booking) throw new ApiError(404, 'Booking not found', 'NOT_FOUND');
   if (!isBookingReadyForPayment(booking)) {
     throw new ApiError(409, 'Complete booking details first (vehicle, address, city, slot, schedule).', 'BOOKING_INCOMPLETE');
@@ -23,7 +25,17 @@ exports.createOrder = async (req, res) => {
   if (booking.paymentStatus === 'paid') {
     throw new ApiError(409, 'Payment already completed for this booking.', 'ALREADY_PAID');
   }
-  const order = await createOrder({ amount: booking.amount, receipt: booking.bookingNumber });
+  if (!Number.isFinite(Number(booking.amount)) || Number(booking.amount) <= 0) {
+    throw new ApiError(400, 'Booking amount is invalid. Please contact support.', 'INVALID_AMOUNT');
+  }
+
+  // Razorpay requires receipt to be unique per order attempt.
+  const receipt = `${booking.bookingNumber}-${Date.now().toString().slice(-6)}`.slice(0, 40);
+  const order = await createOrder({
+    amount: Number(booking.amount),
+    receipt,
+    notes: { bookingNumber: booking.bookingNumber }
+  });
   ok(res, {
     order,
     bookingNumber: booking.bookingNumber,

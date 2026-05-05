@@ -6,10 +6,15 @@ function getRazorpay() {
   if (!env.razorpay.keyId || !env.razorpay.keySecret) return null;
   return new Razorpay({ key_id: env.razorpay.keyId, key_secret: env.razorpay.keySecret });
 }
-async function createOrder({ amount, receipt }) {
+async function createOrder({ amount, receipt, notes }) {
   const razorpay = getRazorpay();
   if (!razorpay) return { id: `dev_order_${Date.now()}`, amount, currency: 'INR', receipt, dev: true };
-  return razorpay.orders.create({ amount: Math.round(amount * 100), currency: 'INR', receipt });
+  return razorpay.orders.create({
+    amount: Math.round(amount * 100),
+    currency: 'INR',
+    receipt,
+    notes: notes && typeof notes === 'object' ? notes : undefined
+  });
 }
 function verifyWebhookSignature(rawBody, signature) {
   if (!env.razorpay.webhookSecret) return true;
