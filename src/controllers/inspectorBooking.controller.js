@@ -97,11 +97,17 @@ function imageHasValidGps(img) {
   return Number.isFinite(lat) && Number.isFinite(lng);
 }
 
+function normalizeChecklistOptions(options) {
+  const list = Array.isArray(options) ? options : ['OK', 'NOK', 'Minor', 'Major'];
+  const cleaned = list.map((x) => String(x || '').trim()).filter(Boolean);
+  return cleaned.length ? cleaned : ['OK', 'NOK', 'Minor', 'Major'];
+}
+
 exports.submit = async (req, res) => {
   const inspector = await myInspector(req);
   const booking = await Booking.findOne({ bookingNumber: req.params.bookingNumber, inspectorId: inspector._id });
   if (!booking) throw new ApiError(404, 'Booking not found', 'NOT_FOUND');
-  const fields = req.body.fields || [];
+  const fields = Array.isArray(req.body.fields) ? req.body.fields : [];
   for (const f of fields) {
     for (const img of f.images || []) {
       if (!imageHasValidGps(img)) {
@@ -114,13 +120,35 @@ exports.submit = async (req, res) => {
     }
   }
   for (const item of booking.checklist || []) {
+    const submitted = fields.find((f) => f.fieldId === item.id);
+    if (item.enableCondition) {
+      const allowed = normalizeChecklistOptions(item.conditionOptions);
+      const picked = submitted?.condition != null ? String(submitted.condition).trim() : '';
+      if (picked && !allowed.includes(picked)) {
+        throw new ApiError(400, `${item.label} condition must be one of: ${allowed.join(', ')}`, 'VALIDATION_ERROR');
+      }
+      if (item.required && !picked) {
+        throw new ApiError(400, `${item.label} requires selecting a condition`, 'VALIDATION_ERROR');
+      }
+    }
     if (item.required) {
-      const submitted = fields.find((f) => f.fieldId === item.id);
       const photos = submitted?.images?.length || 0;
       if (photos < (item.minPhotos || 0)) throw new ApiError(400, `${item.label} requires minimum ${item.minPhotos} photo(s)`, 'VALIDATION_ERROR');
     }
   }
-  booking.submission = { submittedAt: new Date(), inspectorId: inspector._id, inspectorName: req.user.name, fields, overallNotes: req.body.overallNotes };
+  const sanitizedFields = fields.map((f) => ({
+    fieldId: String(f.fieldId || ''),
+    notes: f.notes != null ? String(f.notes) : '',
+    condition: f.condition != null ? String(f.condition) : '',
+    images: Array.isArray(f.images) ? f.images : []
+  }));
+  booking.submission = {
+    submittedAt: new Date(),
+    inspectorId: inspector._id,
+    inspectorName: req.user.name,
+    fields: sanitizedFields,
+    overallNotes: req.body.overallNotes
+  };
   booking.status = 'Submitted for Review';
   booking.history.push({ event: 'Inspection submitted', meta: { inspectorId: inspector._id } });
   await booking.save();

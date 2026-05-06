@@ -5,7 +5,15 @@ const CHECKLIST_FIELD = new mongoose.Schema({
   label: String,
   instructions: String,
   required: { type: Boolean, default: false },
-  minPhotos: { type: Number, default: 0 }
+  minPhotos: { type: Number, default: 0 },
+  /** Inspector can pick health/severity per checklist row (OK/NOK/Minor/Major). */
+  enableCondition: { type: Boolean, default: true },
+  conditionOptions: {
+    type: [String],
+    default: ['OK', 'NOK', 'Minor', 'Major']
+  },
+  /** Inspector can write a free-text remark for this row. */
+  enableRemarks: { type: Boolean, default: true }
 }, { _id: false });
 
 const CAPTURED_IMAGE = new mongoose.Schema({
@@ -24,7 +32,8 @@ const CAPTURED_IMAGE = new mongoose.Schema({
 const FIELD_SUBMISSION = new mongoose.Schema({
   fieldId: String,
   images: [CAPTURED_IMAGE],
-  notes: String
+  notes: String,
+  condition: String
 }, { _id: false });
 
 const INSPECTOR_SUBMISSION = new mongoose.Schema({

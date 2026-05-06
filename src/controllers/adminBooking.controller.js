@@ -18,6 +18,19 @@ async function findBooking(bookingNumber) {
   return booking;
 }
 
+async function computeInspectorBookingStats(inspectorObjectId) {
+  if (!inspectorObjectId) return { inspectionsCompleted: 0, awaitingAdminReview: 0, reportsPublished: 0 };
+  const [inspectionsCompleted, awaitingAdminReview, reportsPublished] = await Promise.all([
+    Booking.countDocuments({
+      inspectorId: inspectorObjectId,
+      status: { $in: ['Submitted for Review', 'Verified', 'Report Published'] }
+    }),
+    Booking.countDocuments({ inspectorId: inspectorObjectId, status: 'Submitted for Review' }),
+    Booking.countDocuments({ inspectorId: inspectorObjectId, status: 'Report Published' })
+  ]);
+  return { inspectionsCompleted, awaitingAdminReview, reportsPublished };
+}
+
 exports.list = async (req, res) => {
   const page = Math.max(Number(req.query.page || 1), 1);
   const limit = Math.min(Number(req.query.limit || 20), 100);
@@ -125,14 +138,13 @@ exports.patchBookingDetails = async (req, res) => {
 };
 exports.patchChecklist = async (req, res) => {
   const booking = await findBooking(req.params.bookingNumber);
-  if (booking.checklistLocked) {
-    throw new ApiError(409, 'Checklist is locked from admin panel after template upload', 'CHECKLIST_LOCKED');
-  }
   booking.checklist = req.body.checklist || [];
   if (req.body.lockChecklist === true) {
     booking.checklistLocked = true;
     booking.checklistLockedAt = new Date();
     booking.checklistTemplateTitle = req.body.templateTitle ? String(req.body.templateTitle).trim() : booking.checklistTemplateTitle;
+  } else if (req.body.lockChecklist === false) {
+    booking.checklistLocked = false;
   }
   booking.history.push({ event: 'Checklist updated', meta: { by: req.user.id } });
   await booking.save();
@@ -201,4 +213,18 @@ exports.publishReport = async (req, res) => {
 
   ok(res, booking);
 };
-exports.inspectors = async (req, res) => ok(res, await Inspector.find().populate('userId', 'name email phone'));
+exports.inspectors = async (req, res) => {
+  const rows = await Inspector.find().populate('userId', 'name email phone').lean();
+  const withStats = await Promise.all(
+    rows.map(async (inspector) => {
+      const stats = await computeInspectorBookingStats(inspector._id);
+      return {
+        ...inspector,
+        jobsCompleted: stats.inspectionsCompleted,
+        reviewsReceived: stats.reportsPublished,
+        awaitingAdminReview: stats.awaitingAdminReview
+      };
+    })
+  );
+  ok(res, withStats);
+};

@@ -15,10 +15,35 @@ function parseSpecialisations(body) {
   return [];
 }
 
+async function computeInspectorBookingStats(inspectorObjectId) {
+  if (!inspectorObjectId) return { inspectionsCompleted: 0, awaitingAdminReview: 0, reportsPublished: 0 };
+  const [inspectionsCompleted, awaitingAdminReview, reportsPublished] = await Promise.all([
+    Booking.countDocuments({
+      inspectorId: inspectorObjectId,
+      status: { $in: ['Submitted for Review', 'Verified', 'Report Published'] }
+    }),
+    Booking.countDocuments({ inspectorId: inspectorObjectId, status: 'Submitted for Review' }),
+    Booking.countDocuments({ inspectorId: inspectorObjectId, status: 'Report Published' })
+  ]);
+  return { inspectionsCompleted, awaitingAdminReview, reportsPublished };
+}
+
+async function attachInspectorStats(doc) {
+  if (!doc) return doc;
+  const stats = await computeInspectorBookingStats(doc._id);
+  const payload = typeof doc.toObject === 'function' ? doc.toObject() : doc;
+  return {
+    ...payload,
+    jobsCompleted: stats.inspectionsCompleted,
+    reviewsReceived: stats.reportsPublished,
+    awaitingAdminReview: stats.awaitingAdminReview
+  };
+}
+
 exports.get = async (req, res) => {
   const doc = await Inspector.findById(req.params.id).populate('userId', 'name email phone role');
   if (!doc) throw new ApiError(404, 'Inspector not found', 'NOT_FOUND');
-  ok(res, doc);
+  ok(res, await attachInspectorStats(doc));
 };
 
 exports.create = async (req, res) => {
@@ -62,7 +87,7 @@ exports.create = async (req, res) => {
   await user.save();
 
   const out = await Inspector.findById(inspector._id).populate('userId', 'name email phone role');
-  ok(res, out, 201);
+  ok(res, await attachInspectorStats(out), 201);
 };
 
 exports.update = async (req, res) => {
@@ -113,7 +138,8 @@ exports.update = async (req, res) => {
   }
 
   await Promise.all([user.save(), inspector.save()]);
-  ok(res, await Inspector.findById(inspector._id).populate('userId', 'name email phone role'));
+  const out = await Inspector.findById(inspector._id).populate('userId', 'name email phone role');
+  ok(res, await attachInspectorStats(out));
 };
 
 exports.remove = async (req, res) => {

@@ -52,9 +52,33 @@ function parseChecklistFieldsFromWorkbook(fileBuffer) {
       instructions,
       required,
       minPhotos,
+      enableCondition: true,
+      conditionOptions: ['OK', 'NOK', 'Minor', 'Major'],
+      enableRemarks: true,
     });
   }
   return fields;
+}
+
+function normalizeChecklistFields(rawFields) {
+  if (!Array.isArray(rawFields)) return [];
+  return rawFields.map((f, idx) => {
+    const idRaw = String(f?.id || '').trim();
+    const labelRaw = String(f?.label || '').trim();
+    const optionsRaw = Array.isArray(f?.conditionOptions)
+      ? f.conditionOptions.map((x) => String(x || '').trim()).filter(Boolean)
+      : ['OK', 'NOK', 'Minor', 'Major'];
+    return {
+      id: idRaw || `field-${idx + 1}`,
+      label: labelRaw || `Field ${idx + 1}`,
+      instructions: String(f?.instructions || '').trim(),
+      required: Boolean(f?.required),
+      minPhotos: Math.max(0, Math.min(20, Number(f?.minPhotos ?? 0) || 0)),
+      enableCondition: f?.enableCondition !== false,
+      conditionOptions: optionsRaw.length ? optionsRaw : ['OK', 'NOK', 'Minor', 'Major'],
+      enableRemarks: f?.enableRemarks !== false
+    };
+  });
 }
 
 // --- Blog ---
@@ -250,7 +274,7 @@ exports.checklistTemplateCreate = async (req, res) => {
     title: String(title).trim(),
     serviceSlug: String(serviceSlug).trim().toLowerCase(),
     sourceFileName: req.body.sourceFileName ? String(req.body.sourceFileName).trim() : '',
-    fields: Array.isArray(fields) ? fields : [],
+    fields: normalizeChecklistFields(fields),
     active: active !== false,
   });
   ok(res, row, 201);
@@ -267,14 +291,14 @@ exports.checklistTemplateUploadExcel = async (req, res) => {
   if (!serviceSlug) throw new ApiError(400, 'serviceSlug is required', 'VALIDATION');
   const title = String(req.body.title || req.file.originalname || '').trim();
   if (!title) throw new ApiError(400, 'title is required', 'VALIDATION');
-  const fields = parseChecklistFieldsFromWorkbook(req.file.buffer);
+  const fields = normalizeChecklistFields(parseChecklistFieldsFromWorkbook(req.file.buffer));
   if (!fields.length) throw new ApiError(400, 'No checklist rows found in the uploaded sheet', 'VALIDATION');
   const row = await ChecklistTemplate.create({
     title,
     serviceSlug,
     sourceFileName: String(req.file.originalname || ''),
     fields,
-    locked: true,
+    locked: false,
     active: true,
   });
   ok(res, row, 201);
