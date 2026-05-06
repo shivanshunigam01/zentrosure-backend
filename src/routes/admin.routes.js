@@ -17,6 +17,7 @@ const adminEnterprise = require('../controllers/adminEnterprise.controller');
 const adminSupport = require('../controllers/adminSupport.controller');
 
 router.use(auth, requireRoles('admin'));
+router.get('/customers/:customerId/bookings', asyncHandler(adminCustomer.listBookingsForCustomer));
 router.get('/customers', asyncHandler(adminCustomer.list));
 router.get('/audit-logs', asyncHandler(adminAudit.list));
 router.get('/roles-access/catalog', asyncHandler(adminRoleAccess.catalog));
@@ -29,6 +30,16 @@ router.post(
     body('companyName').trim().notEmpty().withMessage('Company name is required'),
     body('legalName').optional({ checkFalsy: true }).trim(),
     body('gstin').optional({ checkFalsy: true }).trim(),
+    body('pan')
+      .optional({ checkFalsy: true })
+      .trim()
+      .custom((v) => {
+        const s = String(v).replace(/\s/g, '');
+        if (!/^[A-Za-z]{5}[0-9]{4}[A-Za-z]{1}$/.test(s)) {
+          throw new Error('PAN must be 10 characters like AAAAA9999A');
+        }
+        return true;
+      }),
     body('contactName').optional({ checkFalsy: true }).trim(),
     body('email').optional({ checkFalsy: true }).trim().isEmail().withMessage('Valid email'),
     body('phone').optional({ checkFalsy: true }).trim(),
@@ -42,6 +53,7 @@ router.post(
   asyncHandler(adminEnterprise.create),
 );
 router.get('/bookings', asyncHandler(adminBooking.list));
+router.get('/bookings/export', asyncHandler(adminBooking.exportBookings));
 router.post('/bookings', asyncHandler(adminBooking.create));
 router.get('/bookings/:bookingNumber', asyncHandler(adminBooking.get));
 router.patch('/bookings/:bookingNumber', asyncHandler(adminBooking.patchBookingDetails));

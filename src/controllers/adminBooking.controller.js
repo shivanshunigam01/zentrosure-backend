@@ -9,6 +9,62 @@ const { normalizeIndianPhone } = require('../utils/phone');
 const mail = require('../services/mail.service');
 const bookingWhatsapp = require('../services/bookingWhatsapp.service');
 const { applyBookingDetailPatch } = require('../utils/bookingPatch');
+const xlsx = require('xlsx');
+
+function optionalCreateDetailFields(body) {
+  const out = {};
+  for (const k of ['chassisNumber', 'engineNumber', 'vehicleModel', 'vehicleSubmodel', 'invoiceNumber', 'dealerContactPhone']) {
+    if (body[k] != null && String(body[k]).trim()) out[k] = String(body[k]).trim();
+  }
+  if (body.invoiceDate) {
+    const d = new Date(body.invoiceDate);
+    if (!Number.isNaN(d.getTime())) out.invoiceDate = d;
+  }
+  return out;
+}
+
+function inspectorExportName(b) {
+  const insp = b.inspectorId;
+  if (insp && typeof insp === 'object' && insp.userId && typeof insp.userId === 'object' && insp.userId.name) {
+    return String(insp.userId.name);
+  }
+  return '';
+}
+
+function formatExportDate(d) {
+  if (!d) return '';
+  const t = new Date(d);
+  if (Number.isNaN(t.getTime())) return '';
+  return t.toISOString().slice(0, 10);
+}
+
+function bookingToExportRow(b) {
+  return {
+    'Booking ID': b.bookingNumber ?? '',
+    Service: b.serviceSlug ?? '',
+    Status: b.status ?? '',
+    Payment: b.paymentStatus ?? '',
+    Scheduled: b.scheduledDate ? new Date(b.scheduledDate).toISOString() : '',
+    Slot: b.slot ?? '',
+    City: b.city ?? '',
+    'Customer name': b.customerName ?? '',
+    'Customer phone': b.phone ?? '',
+    'Chassis no.': b.chassisNumber ?? '',
+    'Engine no.': b.engineNumber ?? '',
+    Model: b.vehicleModel ?? '',
+    Submodel: b.vehicleSubmodel ?? '',
+    'Invoice no.': b.invoiceNumber ?? '',
+    'Invoice date': formatExportDate(b.invoiceDate),
+    'Dealer name': b.dealerName ?? '',
+    'Dealer contact no.': b.dealerContactPhone ?? '',
+    'Dealer address': b.dealerAddress ?? '',
+    'Inspection address': b.address ?? '',
+    'Vehicle description': b.vehicleDescription ?? '',
+    Amount: b.amount ?? '',
+    Inspector: inspectorExportName(b),
+    'Report ID': b.report && b.report.reportId ? b.report.reportId : ''
+  };
+}
 
 async function findBooking(bookingNumber) {
   const booking = await Booking.findOne({ bookingNumber })
@@ -106,6 +162,7 @@ exports.create = async (req, res) => {
     dealerName: req.body.dealerName != null ? String(req.body.dealerName).trim() : undefined,
     dealerLocation: req.body.dealerLocation != null ? String(req.body.dealerLocation).trim() : undefined,
     dealerAddress: req.body.dealerAddress != null ? String(req.body.dealerAddress).trim() : undefined,
+    ...optionalCreateDetailFields(req.body),
     amount,
     paymentStatus,
     checklist: Array.isArray(req.body.checklist) ? req.body.checklist : [],
@@ -213,6 +270,46 @@ exports.publishReport = async (req, res) => {
 
   ok(res, booking);
 };
+/** Download bookings as CSV or Excel (admin). Query: format=csv | xlsx */
+exports.exportBookings = async (req, res) => {
+  const format = String(req.query.format || 'csv').toLowerCase();
+  if (!['csv', 'xlsx'].includes(format)) throw new ApiError(400, 'format must be csv or xlsx', 'VALIDATION_ERROR');
+
+  const bookings = await Booking.find({})
+    .sort('-createdAt')
+    .limit(3000)
+    .populate({ path: 'inspectorId', populate: { path: 'userId', select: 'name' } })
+    .lean();
+
+  const template = bookingToExportRow({});
+  const colKeys = Object.keys(template);
+  const rows = bookings.length ? bookings.map(bookingToExportRow) : [];
+  const stamp = new Date().toISOString().slice(0, 10);
+
+  if (format === 'csv') {
+    const escape = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+    const header = colKeys.map(escape).join(',');
+    const lines = rows.map((r) => colKeys.map((k) => escape(r[k])).join(','));
+    const csv = lines.length ? [header, ...lines].join('\n') : header;
+    res
+      .status(200)
+      .setHeader('Content-Type', 'text/csv; charset=utf-8')
+      .setHeader('Content-Disposition', `attachment; filename="zentrosure-bookings-${stamp}.csv"`)
+      .send(`\uFEFF${csv}`);
+    return;
+  }
+
+  const ws = xlsx.utils.json_to_sheet(rows.length ? rows : [template]);
+  const wb = xlsx.utils.book_new();
+  xlsx.utils.book_append_sheet(wb, ws, 'Bookings');
+  const buf = xlsx.write(wb, { type: 'buffer', bookType: 'xlsx' });
+  res
+    .status(200)
+    .setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    .setHeader('Content-Disposition', `attachment; filename="zentrosure-bookings-${stamp}.xlsx"`)
+    .send(buf);
+};
+
 exports.inspectors = async (req, res) => {
   const rows = await Inspector.find().populate('userId', 'name email phone').lean();
   const withStats = await Promise.all(

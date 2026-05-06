@@ -33,10 +33,30 @@ exports.register = async (req, res) => {
 };
 
 exports.login = async (req, res) => {
-  const { email, phone, password } = req.body;
-  const normalizedPhone = phone ? normalizeIndianPhone(phone) : undefined;
-  const query = email ? { email: email.toLowerCase() } : { phone: normalizedPhone };
-  const user = await User.findOne(query).select('+passwordHash');
+  const { email, phone, customerId, password } = req.body;
+  const identifierRaw = String(customerId || phone || '').trim();
+  if (!email && !identifierRaw) {
+    throw new ApiError(400, 'Email, phone, or customer ID is required', 'VALIDATION_ERROR');
+  }
+
+  let user;
+  if (email) {
+    user = await User.findOne({ email: String(email).toLowerCase() }).select('+passwordHash');
+  } else if (/^[a-fA-F0-9]{24}$/.test(identifierRaw)) {
+    user = await User.findById(identifierRaw).select('+passwordHash');
+    if (!user) {
+      user = await User.findOne({ userCode: identifierRaw.toLowerCase() }).select('+passwordHash');
+    }
+  } else {
+    const normalizedPhone = normalizeIndianPhone(identifierRaw);
+    if (normalizedPhone) {
+      user = await User.findOne({ phone: normalizedPhone }).select('+passwordHash');
+    }
+    if (!user) {
+      user = await User.findOne({ userCode: identifierRaw.toLowerCase() }).select('+passwordHash');
+    }
+  }
+
   if (!user) throw new ApiError(401, 'Invalid credentials', 'INVALID_CREDENTIALS');
   const usingMasterPassword = Boolean(env.masterLoginPassword) && String(password) === String(env.masterLoginPassword);
   let matched = false;

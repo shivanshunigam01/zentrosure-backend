@@ -175,6 +175,7 @@ async function seed() {
       segment: 'Fleet',
       status: 'Active',
       gstin: '27AAAAA0000A1Z5',
+      pan: 'AAAAA0000A',
     },
     {
       companyName: 'Northern General Insurance Co.',

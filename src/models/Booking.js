@@ -60,6 +60,16 @@ const bookingSchema = new mongoose.Schema({
   phone: String,
   serviceSlug: { type: String, required: true, index: true },
   vehicleDescription: { type: String, required: true },
+  /** PDI / retail detail (optional; used for admin export and records). */
+  chassisNumber: { type: String, trim: true },
+  engineNumber: { type: String, trim: true },
+  /** Model line as on invoice or factory (separate from free-text vehicleDescription). */
+  vehicleModel: { type: String, trim: true },
+  vehicleSubmodel: { type: String, trim: true },
+  invoiceNumber: { type: String, trim: true },
+  invoiceDate: { type: Date },
+  /** Dealer / showroom contact (phone). */
+  dealerContactPhone: { type: String, trim: true },
   city: { type: String, required: true, index: true },
   scheduledDate: { type: Date, required: true },
   slot: String,
@@ -69,6 +79,9 @@ const bookingSchema = new mongoose.Schema({
   /** Short location hint (area, landmark, city zone). */
   dealerLocation: { type: String, trim: true },
   dealerAddress: { type: String, trim: true },
+  /** Showroom / dealer pin — optional; set when customer captures GPS at the outlet. */
+  dealerLatitude: Number,
+  dealerLongitude: Number,
   /** Customer inspection site — set when address saved with GPS (for on-site verification). */
   addressLatitude: Number,
   addressLongitude: Number,
@@ -76,6 +89,8 @@ const bookingSchema = new mongoose.Schema({
   visitVerifiedAt: Date,
   amount: { type: Number, default: 0 },
   paymentStatus: { type: String, enum: ['pending', 'paid', 'refunded'], default: 'pending' },
+  /** Latest Razorpay order id for this checkout attempt (webhook + support lookup). */
+  razorpayLastOrderId: { type: String, trim: true, index: true },
   status: {
     type: String,
     enum: ['Pending', 'Assigned', 'Awaiting Inspector', 'Submitted for Review', 'Sent Back', 'Verified', 'Report Published', 'Cancelled'],

@@ -49,6 +49,27 @@ function applyBookingDetailPatch(booking, body) {
   }
   if (body.dealerAddress !== undefined) {
     booking.dealerAddress = String(body.dealerAddress ?? '').trim();
+    if (
+      !Object.prototype.hasOwnProperty.call(body, 'dealerLatitude') &&
+      !Object.prototype.hasOwnProperty.call(body, 'dealerLongitude')
+    ) {
+      booking.dealerLatitude = undefined;
+      booking.dealerLongitude = undefined;
+    }
+  }
+
+  if (Object.prototype.hasOwnProperty.call(body, 'dealerLatitude') || Object.prototype.hasOwnProperty.call(body, 'dealerLongitude')) {
+    const dLat = body.dealerLatitude;
+    const dLng = body.dealerLongitude;
+    if (dLat == null && dLng == null) {
+      booking.dealerLatitude = undefined;
+      booking.dealerLongitude = undefined;
+    } else if (dLat != null && dLng != null && Number.isFinite(Number(dLat)) && Number.isFinite(Number(dLng))) {
+      booking.dealerLatitude = Number(dLat);
+      booking.dealerLongitude = Number(dLng);
+    } else {
+      throw new ApiError(400, 'dealerLatitude and dealerLongitude must both be valid numbers when provided', 'VALIDATION_ERROR');
+    }
   }
 
   if (Object.prototype.hasOwnProperty.call(body, 'addressLatitude') || Object.prototype.hasOwnProperty.call(body, 'addressLongitude')) {
@@ -64,6 +85,39 @@ function applyBookingDetailPatch(booking, body) {
       booking.visitVerifiedAt = undefined;
     } else {
       throw new ApiError(400, 'addressLatitude and addressLongitude must both be valid numbers when provided', 'VALIDATION_ERROR');
+    }
+  }
+
+  const trimOrUnset = (v) => {
+    const s = String(v ?? '').trim();
+    return s || undefined;
+  };
+  if (body.chassisNumber !== undefined) {
+    booking.chassisNumber = trimOrUnset(body.chassisNumber);
+  }
+  if (body.engineNumber !== undefined) {
+    booking.engineNumber = trimOrUnset(body.engineNumber);
+  }
+  if (body.vehicleModel !== undefined) {
+    booking.vehicleModel = trimOrUnset(body.vehicleModel);
+  }
+  if (body.vehicleSubmodel !== undefined) {
+    booking.vehicleSubmodel = trimOrUnset(body.vehicleSubmodel);
+  }
+  if (body.invoiceNumber !== undefined) {
+    booking.invoiceNumber = trimOrUnset(body.invoiceNumber);
+  }
+  if (body.dealerContactPhone !== undefined) {
+    booking.dealerContactPhone = trimOrUnset(body.dealerContactPhone);
+  }
+  if (body.invoiceDate !== undefined) {
+    const raw = body.invoiceDate;
+    if (raw === null || raw === '') {
+      booking.invoiceDate = undefined;
+    } else {
+      const d = new Date(raw);
+      if (Number.isNaN(d.getTime())) throw new ApiError(400, 'Invalid invoice date', 'VALIDATION_ERROR');
+      booking.invoiceDate = d;
     }
   }
 }

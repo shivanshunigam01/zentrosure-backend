@@ -6,6 +6,8 @@ const enterpriseCustomerSchema = new mongoose.Schema(
     companyName: { type: String, required: true, trim: true },
     legalName: { type: String, trim: true, default: '' },
     gstin: { type: String, trim: true, default: '' },
+    /** Company PAN (Income Tax) — 10 chars, e.g. AAAAA9999A; optional CRM field for invoicing / TDS. */
+    pan: { type: String, trim: true, uppercase: true, default: '' },
     contactName: { type: String, trim: true, default: '' },
     email: { type: String, trim: true, lowercase: true, default: '' },
     phone: { type: String, trim: true, default: '' },

@@ -4,7 +4,7 @@ const SupportTicket = require('../models/SupportTicket');
 async function generateBookingNumber() {
   const year = new Date().getFullYear();
   const count = await Booking.countDocuments({ createdAt: { $gte: new Date(`${year}-01-01`) } });
-  return `AS-${year}-${String(count + 1).padStart(5, '0')}`;
+  return `ZS-${year}-${String(count + 1).padStart(5, '0')}`;
 }
 
 async function generateTicketNumber() {
