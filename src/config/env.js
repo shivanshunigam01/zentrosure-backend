@@ -77,7 +77,15 @@ module.exports = {
   razorpay: {
     keyId: process.env.RAZORPAY_KEY_ID,
     keySecret: process.env.RAZORPAY_KEY_SECRET,
-    webhookSecret: process.env.RAZORPAY_WEBHOOK_SECRET
+    webhookSecret: process.env.RAZORPAY_WEBHOOK_SECRET,
+    /**
+     * When true, every Razorpay order is created for ₹1 (100 paise) so checkout/dashboard show a minimal charge.
+     * Booking.amount in the database stays the real service price; only the payment gateway charge is reduced.
+     */
+    testing:
+      process.env.RAZORPAY_TESTING === 'true' ||
+      process.env.RAZORPAY_TESTING === '1' ||
+      process.env.RAZORPAY_TESTING === 'yes'
   },
   /** Optional: homepage quick-booking credential emails (nodemailer). */
   smtp: {

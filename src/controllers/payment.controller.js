@@ -39,8 +39,11 @@ exports.createOrder = async (req, res) => {
   ok(res, {
     order,
     bookingNumber: booking.bookingNumber,
+    /** Listed service / booking total (unchanged in testing mode). */
     amount: booking.amount,
-    razorpayKeyId: env.razorpay.keyId || ''
+    razorpayKeyId: env.razorpay.keyId || '',
+    /** True when RAZORPAY_TESTING is on — Razorpay checkout charges ₹1 only. */
+    razorpayTesting: Boolean(env.razorpay.testing)
   });
 };
 

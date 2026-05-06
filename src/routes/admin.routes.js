@@ -11,6 +11,7 @@ const adminNotification = require('../controllers/adminNotification.controller')
 const adminRoleAccess = require('../controllers/adminRoleAccess.controller');
 const service = require('../controllers/service.controller');
 const contentAdmin = require('../controllers/contentAdmin.controller');
+const { uploadCustomerAvatarPhoto, uploadChecklistExcel } = require('../middleware/upload.middleware');
 const adminCustomer = require('../controllers/adminCustomer.controller');
 const adminEnterprise = require('../controllers/adminEnterprise.controller');
 const adminSupport = require('../controllers/adminSupport.controller');
@@ -41,6 +42,7 @@ router.post(
   asyncHandler(adminEnterprise.create),
 );
 router.get('/bookings', asyncHandler(adminBooking.list));
+router.post('/bookings', asyncHandler(adminBooking.create));
 router.get('/bookings/:bookingNumber', asyncHandler(adminBooking.get));
 router.patch('/bookings/:bookingNumber', asyncHandler(adminBooking.patchBookingDetails));
 router.patch('/bookings/:bookingNumber/checklist', asyncHandler(adminBooking.patchChecklist));
@@ -111,6 +113,20 @@ router.get('/content/cities', asyncHandler(contentAdmin.cityListAll));
 router.post('/content/cities', asyncHandler(contentAdmin.cityCreate));
 router.patch('/content/cities/:id', asyncHandler(contentAdmin.cityUpdate));
 router.delete('/content/cities/:id', asyncHandler(contentAdmin.cityDelete));
+
+router.get('/content/model-images', asyncHandler(contentAdmin.modelImageListAll));
+router.post('/content/model-images', asyncHandler(contentAdmin.modelImageCreate));
+router.patch('/content/model-images/:id', asyncHandler(contentAdmin.modelImageUpdate));
+router.delete('/content/model-images/:id', asyncHandler(contentAdmin.modelImageDelete));
+router.post('/content/model-images/upload', uploadCustomerAvatarPhoto, asyncHandler(contentAdmin.modelImageUpload));
+router.get('/content/checklist-templates', asyncHandler(contentAdmin.checklistTemplateListAll));
+router.post('/content/checklist-templates', asyncHandler(contentAdmin.checklistTemplateCreate));
+router.post('/content/checklist-templates/upload', uploadChecklistExcel, asyncHandler(contentAdmin.checklistTemplateUploadExcel));
+router.delete('/content/checklist-templates/:id', asyncHandler(contentAdmin.checklistTemplateDelete));
+router.get('/content/testimonials', asyncHandler(contentAdmin.testimonialListAll));
+router.post('/content/testimonials', asyncHandler(contentAdmin.testimonialCreate));
+router.patch('/content/testimonials/:id', asyncHandler(contentAdmin.testimonialUpdate));
+router.delete('/content/testimonials/:id', asyncHandler(contentAdmin.testimonialDelete));
 
 router.get('/support/tickets', asyncHandler(adminSupport.list));
 router.get('/support/tickets/:ticketNumber', asyncHandler(adminSupport.get));

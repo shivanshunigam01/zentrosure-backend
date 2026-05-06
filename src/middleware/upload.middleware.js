@@ -3,7 +3,7 @@ const fs = require('fs');
 const multer = require('multer');
 const env = require('../config/env');
 const ApiError = require('../utils/apiError');
-const { isCloudinaryEnabled } = require('../services/cloudinary.service');
+const { isCloudinaryEnabled, uploadBuffer } = require('../services/cloudinary.service');
 const { uploadInspectorMediaToCloudinary } = require('./cloudinary.middleware');
 
 const uploadDir = path.resolve(process.cwd(), env.uploadDir);
@@ -119,6 +119,28 @@ const memoryProfilePhoto = multer({
   fileFilter: imageOnlyProfileFilter
 }).single('photo');
 
+function checklistExcelFilter(req, file, cb) {
+  const mt = String(file.mimetype || '').toLowerCase();
+  const ext = path.extname(file.originalname || '').toLowerCase();
+  if (
+    mt.includes('sheet') ||
+    mt.includes('excel') ||
+    mt === 'application/octet-stream' ||
+    ext === '.xlsx' ||
+    ext === '.xls' ||
+    ext === '.csv'
+  ) {
+    return cb(null, true);
+  }
+  return cb(new Error('Checklist import accepts only Excel/CSV files (.xlsx, .xls, .csv)'));
+}
+
+const checklistExcelUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: checklistExcelFilter,
+}).single('file');
+
 async function uploadProfilePhotoToCloudinary(req, res, next) {
   if (!isCloudinaryEnabled()) return next();
   try {
@@ -148,4 +170,14 @@ exports.uploadCustomerAvatarPhoto = (req, res, next) => {
     });
   }
   return diskProfilePhoto(req, res, next);
+};
+
+exports.uploadChecklistExcel = (req, res, next) => {
+  checklistExcelUpload(req, res, (err) => {
+    if (err instanceof multer.MulterError && err.code === 'LIMIT_FILE_SIZE') {
+      return next(new ApiError(400, 'Excel file too large (max 10 MB)', 'FILE_TOO_LARGE'));
+    }
+    if (err) return next(new ApiError(400, err.message || 'Checklist upload failed', 'UPLOAD_ERROR'));
+    return next();
+  });
 };

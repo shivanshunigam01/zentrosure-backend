@@ -20,6 +20,33 @@ function generateTempPassword() {
   return out;
 }
 
+function baseUserCodeFromName(name) {
+  const clean = String(name || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .trim()
+    .replace(/\s+/g, '-')
+    .slice(0, 18);
+  return clean || 'customer';
+}
+
+async function generateUniqueUserCodeFromName(name, excludeUserId) {
+  const base = baseUserCodeFromName(name);
+  let n = 1;
+  while (n < 10000) {
+    const candidate = `${base}-${String(n).padStart(3, '0')}`;
+    const exists = await User.findOne({
+      userCode: candidate,
+      ...(excludeUserId ? { _id: { $ne: excludeUserId } } : {})
+    })
+      .select('_id')
+      .lean();
+    if (!exists) return candidate;
+    n += 1;
+  }
+  throw new ApiError(500, 'Could not generate user ID. Try again.', 'USER_CODE_GENERATION_FAILED');
+}
+
 async function createBookingDocument(user, draft) {
   const service = await Service.findOne({ slug: draft.serviceSlug, active: true });
   if (!service) throw new ApiError(404, 'Selected service not found', 'NOT_FOUND');
@@ -125,10 +152,12 @@ exports.quickPublicBooking = async (req, res) => {
 
   let user = await User.findOne({ phone });
   if (!user) {
+    const userCode = await generateUniqueUserCodeFromName(contactName);
     user = await User.create({
       name: contactName,
       phone,
       email,
+      userCode,
       role: 'customer',
       passwordHash
     });
@@ -138,6 +167,9 @@ exports.quickPublicBooking = async (req, res) => {
     user.name = contactName.length >= 2 ? contactName : user.name;
     user.email = email;
     user.passwordHash = passwordHash;
+    if (!user.userCode) {
+      user.userCode = await generateUniqueUserCodeFromName(user.name || contactName, user._id);
+    }
     await user.save();
   }
 
@@ -160,7 +192,7 @@ exports.quickPublicBooking = async (req, res) => {
 
   const booking = await createBookingDocument({ id: user._id.toString(), name: user.name, phone: user.phone }, draft);
 
-  const userId = user._id.toString();
+  const userId = user.userCode || user._id.toString();
   const emailSent = await sendQuickBookingCredentials({
     to: email,
     customerName: contactName,

@@ -10,6 +10,16 @@ const otpController = require('../controllers/otp.controller');
 router.post('/register', [body('name').notEmpty(), body('password').optional().isLength({ min: 6 })], validate, asyncHandler(authController.register));
 router.post('/login', authLimiter, [body('password').notEmpty()], validate, asyncHandler(authController.login));
 router.post('/forgot-password', authLimiter, [body('emailOrPhone').notEmpty()], validate, asyncHandler(authController.forgotPassword));
+router.post(
+  '/change-password',
+  auth,
+  [
+    body('currentPassword').notEmpty().withMessage('Current password is required'),
+    body('newPassword').isLength({ min: 8, max: 72 }).withMessage('New password must be 8-72 characters')
+  ],
+  validate,
+  asyncHandler(authController.changePassword)
+);
 router.post('/refresh', asyncHandler(authController.refresh));
 router.post('/logout', auth, asyncHandler(authController.logout));
 router.post('/otp/send', otpLimiter, [body('phone').notEmpty()], validate, asyncHandler(otpController.sendOtp));

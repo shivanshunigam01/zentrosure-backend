@@ -32,6 +32,8 @@ router.get('/cities/:slug', asyncHandler(content.cityBySlug));
 router.get('/blog', asyncHandler(content.blogList));
 router.get('/blog/:slug', asyncHandler(content.blogDetail));
 router.get('/faqs', asyncHandler(content.faqs));
+router.get('/models/images', asyncHandler(content.popularModelImages));
+router.get('/testimonials', asyncHandler(content.testimonials));
 router.post('/leads/contact', asyncHandler(lead.contact));
 router.post('/leads/quick-callback', asyncHandler(lead.quickCallback));
 router.post(

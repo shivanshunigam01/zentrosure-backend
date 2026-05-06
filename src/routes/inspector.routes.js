@@ -15,6 +15,8 @@ router.get('/tasks', asyncHandler(inspector.tasks));
 router.post('/location', asyncHandler(inspector.updateLiveLocation));
 router.patch('/bookings/:bookingNumber', asyncHandler(inspector.patchBookingDetails));
 router.get('/bookings/:bookingNumber', asyncHandler(inspector.get));
+router.post('/bookings/:bookingNumber/accept', asyncHandler(inspector.acceptAssignment));
+router.post('/bookings/:bookingNumber/reject', asyncHandler(inspector.rejectAssignment));
 router.post('/bookings/:bookingNumber/photos', uploadPhotos, asyncHandler(upload.uploadPhotos));
 router.post('/bookings/:bookingNumber/submit', asyncHandler(inspector.submit));
 module.exports = router;

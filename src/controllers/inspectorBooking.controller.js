@@ -36,6 +36,61 @@ exports.patchBookingDetails = async (req, res) => {
   await booking.save();
   ok(res, booking);
 };
+
+exports.acceptAssignment = async (req, res) => {
+  const inspector = await myInspector(req);
+  const booking = await Booking.findOne({ bookingNumber: req.params.bookingNumber, inspectorId: inspector._id });
+  if (!booking) throw new ApiError(404, 'Booking not found', 'NOT_FOUND');
+  if (!['Awaiting Inspector', 'Assigned'].includes(String(booking.status || ''))) {
+    throw new ApiError(409, 'Booking is not awaiting inspector acceptance', 'INVALID_TRANSITION');
+  }
+  booking.assignmentStatus = 'accepted';
+  booking.assignmentRespondedAt = new Date();
+  booking.status = 'Assigned';
+  booking.history.push({ event: 'Inspector accepted booking', meta: { inspectorId: inspector._id } });
+  inspector.status = 'On Job';
+  await Promise.all([booking.save(), inspector.save()]);
+
+  const bookingNumber = booking.bookingNumber;
+  const inspectorId = inspector._id;
+  setImmediate(() => {
+    (async () => {
+      try {
+        const bookingFresh = await Booking.findOne({ bookingNumber }).populate('customerId', 'name email phone');
+        const inspectorFresh = await Inspector.findById(inspectorId).populate('userId', 'name email phone');
+        if (!bookingFresh || !inspectorFresh) return;
+        await mail.sendInspectorAssignedEmail(bookingFresh, inspectorFresh);
+        await bookingWhatsapp.sendInspectorAssignedWhatsApp(bookingFresh);
+      } catch (err) {
+        console.error('[inspector accept] customer notify failed:', err.message || err);
+      }
+    })();
+  });
+
+  ok(res, booking);
+};
+
+exports.rejectAssignment = async (req, res) => {
+  const inspector = await myInspector(req);
+  const booking = await Booking.findOne({ bookingNumber: req.params.bookingNumber, inspectorId: inspector._id });
+  if (!booking) throw new ApiError(404, 'Booking not found', 'NOT_FOUND');
+  if (!['Awaiting Inspector', 'Assigned'].includes(String(booking.status || ''))) {
+    throw new ApiError(409, 'Booking is not awaiting inspector acceptance', 'INVALID_TRANSITION');
+  }
+  const note = String(req.body?.reason || 'Inspector is busy').trim().slice(0, 300);
+  booking.assignmentStatus = 'rejected';
+  booking.assignmentRespondedAt = new Date();
+  booking.assignmentRejectionNote = note || 'Inspector is busy';
+  booking.inspectorId = null;
+  booking.status = 'Pending';
+  booking.history.push({
+    event: 'Inspector rejected booking',
+    meta: { inspectorId: inspector._id, reason: booking.assignmentRejectionNote },
+  });
+  inspector.status = 'Active';
+  await Promise.all([booking.save(), inspector.save()]);
+  ok(res, booking);
+};
 function imageHasValidGps(img) {
   const lat = Number(img?.latitude);
   const lng = Number(img?.longitude);

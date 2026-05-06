@@ -65,11 +65,33 @@ exports.broadcast = async (req, res) => {
       const name = String(u.name || 'Customer').trim();
       const text = [`Hi ${name},`, '', message, '', '— ZentroSure'].join('\n');
       try {
+        const safeMessage = String(message || '')
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/\n/g, '<br />');
+        const safeName = String(name || 'Customer')
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;');
+        const html = mail.wrapBrandedEmailHtml({
+          preheader: 'ZentroSure update',
+          innerHtml: `
+            <p style="margin:0 0 8px 0;font-size:22px;font-weight:800;color:#102237;line-height:1.25;">ZentroSure update</p>
+            <p style="margin:0 0 16px 0;font-size:15px;line-height:1.6;color:#334155;">Hi ${safeName},</p>
+            <div style="margin:0 0 10px 0;background-color:#f8fafc;border-radius:12px;border:1px solid #e2e8f0;padding:14px 16px;color:#334155;font-size:14px;line-height:1.7;">
+              ${safeMessage}
+            </div>
+          `
+        });
         await transporter.sendMail({
           from: env.smtp.from,
           to,
           subject: 'ZentroSure update',
-          text
+          text,
+          html
         });
         sent += 1;
       } catch (err) {

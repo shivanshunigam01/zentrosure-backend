@@ -292,6 +292,154 @@ function getTransporter() {
   });
 }
 
+function buildQuickBookingCredentialsHtml({
+  customerName,
+  bookingNumber,
+  userId,
+  phoneDigits,
+  password,
+  loginHref,
+  portalHref
+}) {
+  const name = escapeHtml(customerName);
+  const bid = escapeHtml(bookingNumber);
+  const uid = escapeHtml(userId);
+  const phone = escapeHtml(formatPhoneDisplay(phoneDigits));
+  const pass = escapeHtml(password);
+  const login = escapeHtml(loginHref);
+  const portal = escapeHtml(portalHref);
+
+  const innerHtml = `
+    <p style="margin:0 0 8px 0;font-size:22px;font-weight:800;color:#102237;line-height:1.25;">Booking confirmed</p>
+    <p style="margin:0 0 16px 0;font-size:15px;line-height:1.6;color:#334155;">Hi ${name}, your quick booking is confirmed. Please complete the remaining details below in your customer portal.</p>
+
+    <div style="margin:0 0 18px 0;background-color:#f8fafc;border-radius:12px;border:1px solid #e2e8f0;padding:16px 18px;">
+      <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;font-weight:700;">Booking ID</div>
+      <div style="margin-top:6px;font-size:18px;font-weight:800;color:#102237;">${bid}</div>
+    </div>
+
+    <div style="margin:0 0 18px 0;background-color:#f8fafc;border-radius:12px;border:1px solid #e2e8f0;padding:16px 18px;">
+      <div style="font-size:13px;font-weight:800;color:#102237;">PLEASE COMPLETE YOUR BOOKING DETAILS</div>
+      <div style="margin-top:6px;font-size:14px;line-height:1.6;color:#334155;">You booked using quick booking; vehicle and schedule details are still placeholders. Sign in to your portal and update the info.</div>
+      <ul style="margin:12px 0 0 18px;padding:0;color:#334155;font-size:14px;line-height:1.7;">
+        <li>Vehicle: make, model, year, registration</li>
+        <li>Full inspection address or pickup location</li>
+        <li>Preferred date & time slot</li>
+        <li>RC / insurance details and any notes</li>
+      </ul>
+    </div>
+
+    <div style="margin:0 0 18px 0;background-color:#f8fafc;border-radius:12px;border:1px solid #e2e8f0;padding:16px 18px;">
+      <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;font-weight:700;">Your account</div>
+      <div style="margin-top:12px;display:flex;flex-direction:column;gap:10px;">
+        <div style="display:flex;gap:12px;align-items:flex-start;">
+          <div style="min-width:80px;font-size:11px;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;font-weight:800;">User ID</div>
+          <div style="flex:1;padding:10px 12px;background:#ffffff;border:1px solid #e2e8f0;border-radius:10px;font-size:14px;font-weight:800;color:#102237;">${uid}</div>
+        </div>
+        <div style="display:flex;gap:12px;align-items:flex-start;">
+          <div style="min-width:80px;font-size:11px;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;font-weight:800;">Phone</div>
+          <div style="flex:1;padding:10px 12px;background:#ffffff;border:1px solid #e2e8f0;border-radius:10px;font-size:14px;font-weight:800;color:#102237;">${phone}</div>
+        </div>
+        <div style="display:flex;gap:12px;align-items:flex-start;">
+          <div style="min-width:80px;font-size:11px;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;font-weight:800;">Password</div>
+          <div style="flex:1;padding:10px 12px;background:#ffffff;border:1px solid #e2e8f0;border-radius:10px;font-size:14px;font-weight:800;color:#102237;">${pass}</div>
+        </div>
+      </div>
+    </div>
+
+    <table role="presentation" cellpadding="0" cellspacing="0" align="center" style="margin:0 auto 18px auto;">
+      <tr>
+        <td align="center" style="border-radius:12px;background-color:#b91c1c;">
+          <a href="${portal}" target="_blank" rel="noopener noreferrer" style="display:inline-block;padding:14px 28px;font-size:15px;font-weight:800;color:#ffffff;text-decoration:none;border-radius:12px;">Track your booking</a>
+        </td>
+      </tr>
+    </table>
+
+    <p style="margin:0 0 6px 0;font-size:13px;line-height:1.5;color:#64748b;">
+      Or sign in using this link:<br />
+      <a href="${login}" style="color:#102237;font-weight:800;text-decoration:none;">${login}</a>
+    </p>
+
+    <p style="margin:10px 0 0 0;font-size:12px;line-height:1.55;color:#64748b;">
+      After you sign in, please update your password from Profile settings.
+    </p>
+  `;
+
+  return wrapBrandedEmailHtml({
+    preheader: `Booking ${bookingNumber} confirmed — login details included.`,
+    innerHtml,
+  });
+}
+
+function buildInspectorAssignedHtml({
+  customerName,
+  bookingNumber,
+  vehicleDescription,
+  city,
+  scheduleLine,
+  inspectorName,
+  inspectorCode,
+  inspectorPhoneDisplay,
+  inspectorEmailDisplay,
+  inspectorCity,
+  portalHref
+}) {
+  const name = escapeHtml(customerName);
+  const bid = escapeHtml(bookingNumber);
+  const veh = escapeHtml(vehicleDescription);
+  const c = escapeHtml(city);
+  const when = escapeHtml(scheduleLine);
+  const inName = escapeHtml(inspectorName);
+  const inCode = escapeHtml(inspectorCode);
+  const inPhone = escapeHtml(inspectorPhoneDisplay);
+  const inEmail = escapeHtml(inspectorEmailDisplay);
+  const inCity = escapeHtml(inspectorCity);
+  const portal = escapeHtml(portalHref);
+
+  const innerHtml = `
+    <p style="margin:0 0 8px 0;font-size:22px;font-weight:800;color:#102237;line-height:1.25;">Inspector assigned</p>
+    <p style="margin:0 0 16px 0;font-size:15px;line-height:1.6;color:#334155;">Hi ${name}, an inspector has been assigned to your booking. Below are the details and the next steps.</p>
+
+    <div style="margin:0 0 14px 0;background-color:#f8fafc;border-radius:12px;border:1px solid #e2e8f0;padding:16px 18px;">
+      <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;font-weight:700;">Booking</div>
+      <div style="margin-top:6px;font-size:18px;font-weight:800;color:#102237;">${bid}</div>
+      <div style="margin-top:10px;color:#334155;font-size:14px;line-height:1.7;">
+        <div><strong style="color:#102237;">Vehicle:</strong> ${veh}</div>
+        <div><strong style="color:#102237;">City:</strong> ${c}</div>
+        <div><strong style="color:#102237;">Schedule:</strong> ${when}</div>
+      </div>
+    </div>
+
+    <div style="margin:0 0 18px 0;background-color:#f8fafc;border-radius:12px;border:1px solid #e2e8f0;padding:16px 18px;">
+      <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;font-weight:700;">Inspector</div>
+      <div style="margin-top:10px;color:#334155;font-size:14px;line-height:1.7;">
+        <div><strong style="color:#102237;">Name:</strong> ${inName}</div>
+        <div><strong style="color:#102237;">Code:</strong> ${inCode}</div>
+        <div><strong style="color:#102237;">Phone:</strong> ${inPhone}</div>
+        <div><strong style="color:#102237;">Email:</strong> ${inEmail}</div>
+        <div><strong style="color:#102237;">Base city:</strong> ${inCity}</div>
+      </div>
+    </div>
+
+    <table role="presentation" cellpadding="0" cellspacing="0" align="center" style="margin:0 auto 18px auto;">
+      <tr>
+        <td align="center" style="border-radius:12px;background-color:#b91c1c;">
+          <a href="${portal}" target="_blank" rel="noopener noreferrer" style="display:inline-block;padding:14px 28px;font-size:15px;font-weight:800;color:#ffffff;text-decoration:none;border-radius:12px;">Track your booking</a>
+        </td>
+      </tr>
+    </table>
+
+    <p style="margin:0;font-size:12px;line-height:1.6;color:#64748b;">
+      You can view updated status in your customer portal anytime.
+    </p>
+  `;
+
+  return wrapBrandedEmailHtml({
+    preheader: `Inspector assigned — Booking ${bookingNumber}. Track your booking in the portal.`,
+    innerHtml,
+  });
+}
+
 /**
  * Sends quick-booking credentials after public homepage booking.
  * @returns {Promise<boolean>} true if SMTP sent, false if SMTP not configured or send failed
@@ -306,9 +454,10 @@ async function sendQuickBookingCredentials({
   loginUrl
 }) {
   const transporter = getTransporter();
-  const phoneDisplay = phoneDigits;
+  const phoneDisplay = formatPhoneDisplay(phoneDigits);
   const loginPreferred = loginUrl || env.loginWebUrl;
   const loginHref = loginUrlForCustomerEmail(loginPreferred);
+  const portalHref = portalBookingsUrl();
 
   const subject = `ZentroSure — Booking ${bookingNumber} confirmed · Your login details`;
   const text = [
@@ -343,11 +492,21 @@ async function sendQuickBookingCredentials({
     return false;
   }
   try {
+    const html = buildQuickBookingCredentialsHtml({
+      customerName,
+      bookingNumber,
+      userId,
+      phoneDigits,
+      password,
+      loginHref,
+      portalHref
+    });
     await transporter.sendMail({
       from: env.smtp.from,
       to,
       subject,
-      text
+      text,
+      html
     });
     return true;
   } catch (err) {
@@ -438,11 +597,25 @@ async function sendInspectorAssignedEmail(booking, inspector) {
     return false;
   }
   try {
+    const html = buildInspectorAssignedHtml({
+      customerName,
+      bookingNumber: booking.bookingNumber,
+      vehicleDescription: booking.vehicleDescription,
+      city: booking.city,
+      scheduleLine,
+      inspectorName: inspectorName,
+      inspectorCode: inspector.inspectorCode,
+      inspectorPhoneDisplay,
+      inspectorEmailDisplay,
+      inspectorCity,
+      portalHref
+    });
     await transporter.sendMail({
       from: env.smtp.from,
       to,
       subject,
-      text
+      text,
+      html
     });
     return true;
   } catch (err) {
@@ -617,5 +790,6 @@ module.exports = {
   sendInspectionCompletedEmail,
   sendReportPublishedEmail,
   getTransporter,
-  publicInspectionUrl
+  publicInspectionUrl,
+  wrapBrandedEmailHtml
 };

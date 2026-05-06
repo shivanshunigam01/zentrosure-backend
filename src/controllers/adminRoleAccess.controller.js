@@ -3,9 +3,9 @@ const ApiError = require('../utils/apiError');
 const { ok } = require('../utils/response');
 
 const ROLE_MODULES = {
-  customer: ['dashboard', 'bookings', 'new', 'reports', 'certificates', 'payments', 'verify', 'support', 'profile'],
+  customer: ['dashboard', 'bookings', 'new', 'services', 'reports', 'certificates', 'payments', 'verify', 'support', 'profile'],
   inspector: ['today', 'tasks', 'checklist', 'route', 'history', 'profile'],
-  admin: ['dashboard', 'bookings', 'inspectors', 'customers', 'enterprise', 'vehicles', 'qc', 'payments', 'invoices', 'coupons', 'blog', 'faqs', 'cities', 'notifications', 'audit', 'roles', 'support']
+  admin: ['dashboard', 'bookings', 'inspectors', 'customers', 'enterprise', 'vehicles', 'qc', 'payments', 'invoices', 'coupons', 'blog', 'faqs', 'cities', 'model-images', 'testimonials', 'notifications', 'audit', 'roles', 'support']
 };
 
 function sanitizeModuleAccess(raw = {}) {

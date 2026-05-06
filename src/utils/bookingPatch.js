@@ -41,6 +41,16 @@ function applyBookingDetailPatch(booking, body) {
     }
   }
 
+  if (body.dealerName !== undefined) {
+    booking.dealerName = String(body.dealerName ?? '').trim();
+  }
+  if (body.dealerLocation !== undefined) {
+    booking.dealerLocation = String(body.dealerLocation ?? '').trim();
+  }
+  if (body.dealerAddress !== undefined) {
+    booking.dealerAddress = String(body.dealerAddress ?? '').trim();
+  }
+
   if (Object.prototype.hasOwnProperty.call(body, 'addressLatitude') || Object.prototype.hasOwnProperty.call(body, 'addressLongitude')) {
     const lat = body.addressLatitude;
     const lng = body.addressLongitude;

@@ -7,13 +7,13 @@ const connectDB = require('../config/db');
 const User = require('../models/User');
 const Inspector = require('../models/Inspector');
 const Service = require('../models/Service');
-const { BlogPost, Faq, CityPage } = require('../models/Content');
+const { BlogPost, Faq, CityPage, Testimonial } = require('../models/Content');
 const EnterpriseCustomer = require('../models/EnterpriseCustomer');
 
 /** Dev logins — same password for all (stored as bcrypt in DB). Log in with email + password. */
 const SEED_PASSWORD = 'Password@123';
 const SEED_USERS = [
-  { email: 'admin@zentrosure.com', name: 'ZentroSure Admin', phone: '919999999999', role: 'admin' },
+  { email: 'admin@zentrosure.com', name: 'ZentroSure Admin', phone: '919771495587', role: 'admin' },
   { email: 'customer@zentrosure.com', name: 'Demo Customer', phone: '917777777777', role: 'customer' },
   { email: 'inspector@zentrosure.com', name: 'Demo Inspector', phone: '918888888888', role: 'inspector' },
 ];
@@ -37,7 +37,7 @@ const SERVICES = [
   { slug: 'finance', title: 'Finance / Loan Verification', description: 'Vehicle verification for banks and lenders.', price: 1199, eta: '60 min', icon: 'bank', active: true },
   { slug: 'government', title: 'Government Vehicle Inspection', description: 'PSU and government tender inspections.', price: 0, eta: 'Custom', icon: 'landmark', active: true },
   { slug: 'dealer-stock', title: 'Dealer Stock Inspection', description: 'Dealer yard stock audits.', price: 0, eta: 'Custom', icon: 'warehouse', active: true },
-  { slug: 'accident', title: 'Accident Vehicle Inspection', description: 'Damage assessment and repair estimate support.', price: 1999, eta: '90 min', icon: 'alert', active: true },
+  { slug: 'accident', title: 'Accident Vehicle Inspection & Certification', description: 'Damage assessment, repair estimate support, and certification guidance.', price: 1999, eta: '90 min', icon: 'alert', active: true },
   { slug: 'road-test', title: 'Road Test Inspection', description: 'On-road performance and drivetrain evaluation.', price: 1499, eta: '60 min', icon: 'gauge', active: true },
   { slug: 'documents', title: 'Document Verification', description: 'RC, insurance, PUC and hypothecation verification.', price: 599, eta: '30 min', icon: 'filetext', active: true },
   { slug: 'valuation', title: 'Valuation Report', description: 'Independent fair market valuation report.', price: 999, eta: '45 min', icon: 'rupee', active: true },
@@ -61,6 +61,9 @@ const FAQS = [
   { question: 'What is ZentroSure Certification?', answer: 'Vehicles that pass all critical checks can earn the ZentroSure Certified mark — a trust signal for buyers, dealers and lenders.' },
   { question: 'How do I book an inspection?', answer: 'Create a customer account, choose a service and city, fill vehicle details, complete WhatsApp OTP verification, and confirm your booking.' },
   { question: 'Is the inspection at my location?', answer: 'Yes. Our engineers visit the address you provide — home, office or dealer yard — for the inspection slot you select.' },
+  { question: 'Where is ZentroSure headquartered?', answer: 'ZentroSure is headquartered in Patna, India. We coordinate a pan-India inspector network — HQ location does not limit where we can book inspections.' },
+  { question: 'Can I get a GST invoice for my booking?', answer: 'Yes. After payment is confirmed, a GST-compliant invoice is available in your customer portal and can be included in email receipts where configured.' },
+  { question: 'What if the seller refuses access during inspection?', answer: 'Our inspector documents what they can access. We recommend agreeing inspection access with the seller before the slot. If critical areas cannot be opened, the report will note limitations clearly.' },
 ];
 
 const BLOG_POSTS = [
@@ -92,6 +95,13 @@ const BLOG_POSTS = [
     content: 'Draft content for fleet operators.',
     published: false,
   },
+];
+
+const TESTIMONIALS = [
+  { name: 'Aarav Mehta', city: 'Mumbai', quote: 'ZentroSure caught hidden frame damage on the used SUV I almost bought. Saved me ₹3 lakh.', rating: 5, active: true },
+  { name: 'Priya Sharma', city: 'Delhi', quote: 'Inspector arrived on time, full report on WhatsApp in 2 hours. Premium experience.', rating: 5, active: true },
+  { name: 'Rahul Singh', city: 'Bangalore', quote: 'Used the QR verification — every claim in the report checked out. Bought with confidence.', rating: 5, active: true },
+  { name: 'Nisha Patel', city: 'Ahmedabad', quote: 'We use ZentroSure for all our fleet PDIs. Best ops dashboard in the market.', rating: 5, active: true },
 ];
 
 async function seed() {
@@ -149,6 +159,10 @@ async function seed() {
     await BlogPost.create(post);
   }
   console.log(`Seeded ${BLOG_POSTS.length} blog posts`);
+
+  await Testimonial.deleteMany({});
+  await Testimonial.insertMany(TESTIMONIALS);
+  console.log(`Seeded ${TESTIMONIALS.length} testimonials`);
 
   const ENTERPRISE_SAMPLES = [
     {

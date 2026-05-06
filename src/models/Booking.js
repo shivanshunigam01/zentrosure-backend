@@ -55,6 +55,11 @@ const bookingSchema = new mongoose.Schema({
   scheduledDate: { type: Date, required: true },
   slot: String,
   address: String,
+  /** Pre-delivery / showroom: dealer or outlet where the vehicle is inspected. */
+  dealerName: { type: String, trim: true },
+  /** Short location hint (area, landmark, city zone). */
+  dealerLocation: { type: String, trim: true },
+  dealerAddress: { type: String, trim: true },
   /** Customer inspection site — set when address saved with GPS (for on-site verification). */
   addressLatitude: Number,
   addressLongitude: Number,
@@ -68,7 +73,13 @@ const bookingSchema = new mongoose.Schema({
     default: 'Pending', index: true
   },
   inspectorId: { type: mongoose.Schema.Types.ObjectId, ref: 'Inspector' },
+  assignmentStatus: { type: String, enum: ['pending', 'accepted', 'rejected'], default: 'pending' },
+  assignmentRespondedAt: Date,
+  assignmentRejectionNote: String,
   checklist: [CHECKLIST_FIELD],
+  checklistLocked: { type: Boolean, default: false },
+  checklistLockedAt: Date,
+  checklistTemplateTitle: String,
   uploadedImages: [CAPTURED_IMAGE],
   submission: INSPECTOR_SUBMISSION,
   report: REPORT_DATA,
