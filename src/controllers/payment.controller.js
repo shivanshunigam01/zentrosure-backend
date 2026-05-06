@@ -25,8 +25,29 @@ exports.createOrder = async (req, res) => {
   if (booking.paymentStatus === 'paid') {
     throw new ApiError(409, 'Payment already completed for this booking.', 'ALREADY_PAID');
   }
-  if (!Number.isFinite(Number(booking.amount)) || Number(booking.amount) <= 0) {
+  const bookingAmount = Number(booking.amount);
+  if (!Number.isFinite(bookingAmount) || bookingAmount < 0) {
     throw new ApiError(400, 'Booking amount is invalid. Please contact support.', 'INVALID_AMOUNT');
+  }
+
+  // Free / zero-priced services: no Razorpay checkout required.
+  if (bookingAmount === 0) {
+    booking.paymentStatus = 'paid';
+    booking.history.push({
+      event: 'Payment bypassed (zero amount service)',
+      meta: { by: req.user.id, bookingNumber: booking.bookingNumber }
+    });
+    await booking.save();
+    ok(res, {
+      order: null,
+      bookingNumber: booking.bookingNumber,
+      amount: 0,
+      razorpayKeyId: env.razorpay.keyId || '',
+      razorpayTesting: Boolean(env.razorpay.testing),
+      requiresPayment: false,
+      paymentStatus: booking.paymentStatus
+    });
+    return;
   }
 
   // Razorpay requires receipt to be unique per order attempt.
@@ -43,7 +64,8 @@ exports.createOrder = async (req, res) => {
     amount: booking.amount,
     razorpayKeyId: env.razorpay.keyId || '',
     /** True when RAZORPAY_TESTING is on — Razorpay checkout charges ₹1 only. */
-    razorpayTesting: Boolean(env.razorpay.testing)
+    razorpayTesting: Boolean(env.razorpay.testing),
+    requiresPayment: true
   });
 };
 
