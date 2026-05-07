@@ -252,6 +252,13 @@ function portalBookingsUrl() {
   }
 }
 
+/** Live-tracking page URL for a specific booking (used in inspector-dispatched email). */
+function portalTrackingUrl(bookingNumber) {
+  const base = portalBookingsUrl().replace(/\/$/, '');
+  const bid = encodeURIComponent(String(bookingNumber || ''));
+  return `${base}/${bid}/track`;
+}
+
 function publicInspectionUrl(bookingNumber) {
   const explicit = (process.env.PUBLIC_INSPECTION_WEB_URL || '').trim();
   if (explicit) return `${explicit.replace(/\/$/, '')}/${encodeURIComponent(String(bookingNumber || ''))}`;
@@ -382,7 +389,8 @@ function buildInspectorAssignedHtml({
   inspectorPhoneDisplay,
   inspectorEmailDisplay,
   inspectorCity,
-  portalHref
+  portalHref,
+  trackingHref,
 }) {
   const name = escapeHtml(customerName);
   const bid = escapeHtml(bookingNumber);
@@ -395,10 +403,17 @@ function buildInspectorAssignedHtml({
   const inEmail = escapeHtml(inspectorEmailDisplay);
   const inCity = escapeHtml(inspectorCity);
   const portal = escapeHtml(portalHref);
+  const track = escapeHtml(trackingHref || portalHref);
 
   const innerHtml = `
-    <p style="margin:0 0 8px 0;font-size:22px;font-weight:800;color:#102237;line-height:1.25;">Inspector assigned</p>
-    <p style="margin:0 0 16px 0;font-size:15px;line-height:1.6;color:#334155;">Hi ${name}, an inspector has been assigned to your booking. Below are the details and the next steps.</p>
+    <p style="margin:0 0 8px 0;font-size:22px;font-weight:800;color:#102237;line-height:1.25;">Inspector dispatched · on the way</p>
+    <p style="margin:0 0 12px 0;font-size:15px;line-height:1.6;color:#334155;">Hi ${name}, your inspector has accepted the assignment and is now en route to your location. You can follow them on a live map until they arrive.</p>
+
+    <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="margin:0 0 18px 0;background-color:#ecfeff;border:1px solid #a5f3fc;border-radius:12px;">
+      <tr><td style="padding:14px 16px;color:#0e7490;font-size:14px;line-height:1.55;">
+        <strong style="color:#0c4a6e;">Live tracking is now active.</strong> Open the link below to see the inspector's current location, route, and ETA, just like a delivery app.
+      </td></tr>
+    </table>
 
     <div style="margin:0 0 14px 0;background-color:#f8fafc;border-radius:12px;border:1px solid #e2e8f0;padding:16px 18px;">
       <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;font-weight:700;">Booking</div>
@@ -411,7 +426,7 @@ function buildInspectorAssignedHtml({
     </div>
 
     <div style="margin:0 0 18px 0;background-color:#f8fafc;border-radius:12px;border:1px solid #e2e8f0;padding:16px 18px;">
-      <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;font-weight:700;">Inspector</div>
+      <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;font-weight:700;">Your inspector</div>
       <div style="margin-top:10px;color:#334155;font-size:14px;line-height:1.7;">
         <div><strong style="color:#102237;">Name:</strong> ${inName}</div>
         <div><strong style="color:#102237;">Code:</strong> ${inCode}</div>
@@ -421,21 +436,26 @@ function buildInspectorAssignedHtml({
       </div>
     </div>
 
-    <table role="presentation" cellpadding="0" cellspacing="0" align="center" style="margin:0 auto 18px auto;">
+    <table role="presentation" cellpadding="0" cellspacing="0" align="center" style="margin:0 auto 14px auto;">
       <tr>
         <td align="center" style="border-radius:12px;background-color:#b91c1c;">
-          <a href="${portal}" target="_blank" rel="noopener noreferrer" style="display:inline-block;padding:14px 28px;font-size:15px;font-weight:800;color:#ffffff;text-decoration:none;border-radius:12px;">Track your booking</a>
+          <a href="${track}" target="_blank" rel="noopener noreferrer" style="display:inline-block;padding:14px 28px;font-size:15px;font-weight:800;color:#ffffff;text-decoration:none;border-radius:12px;">Track inspector live</a>
         </td>
       </tr>
     </table>
 
-    <p style="margin:0;font-size:12px;line-height:1.6;color:#64748b;">
-      You can view updated status in your customer portal anytime.
+    <p style="margin:0 0 6px 0;font-size:13px;line-height:1.55;color:#64748b;word-break:break-all;">
+      Or open this link in your browser:<br />
+      <a href="${track}" style="color:#102237;font-weight:700;">${track}</a>
+    </p>
+
+    <p style="margin:14px 0 0 0;font-size:12px;line-height:1.6;color:#64748b;">
+      You can also see updated status anytime in <a href="${portal}" style="color:#102237;font-weight:600;">your customer portal</a>.
     </p>
   `;
 
   return wrapBrandedEmailHtml({
-    preheader: `Inspector assigned — Booking ${bookingNumber}. Track your booking in the portal.`,
+    preheader: `Inspector dispatched — Booking ${bookingNumber}. Track them live until they reach you.`,
     innerHtml,
   });
 }
@@ -561,12 +581,15 @@ async function sendInspectorAssignedEmail(booking, inspector) {
   const inspectorCity = (inspector.city && String(inspector.city).trim()) || '—';
   const scheduleLine = formatSchedule(booking);
   const portalHref = portalBookingsUrl();
+  const trackingHref = portalTrackingUrl(booking.bookingNumber);
 
-  const subject = `ZentroSure — Inspector assigned · Booking ${booking.bookingNumber}`;
+  const subject = `ZentroSure — Inspector dispatched · Track live · Booking ${booking.bookingNumber}`;
   const textLines = [
     `Hi ${customerName},`,
     '',
-    `An inspector has been assigned to your inspection (Booking ${booking.bookingNumber}).`,
+    `Your inspector is dispatched and on the way for inspection (Booking ${booking.bookingNumber}).`,
+    `You can track them on a live map: ${trackingHref}`,
+    '',
     '',
     'Booking',
     `- Vehicle: ${booking.vehicleDescription}`,
@@ -589,11 +612,17 @@ async function sendInspectorAssignedEmail(booking, inspector) {
   if (Array.isArray(inspector.specialisations) && inspector.specialisations.length) {
     textLines.push(`- Focus: ${inspector.specialisations.slice(0, 4).join(' · ')}`);
   }
-  textLines.push('', `Track your booking: ${portalHref}`, '', '— ZentroSure');
+  textLines.push(
+    '',
+    `Track inspector live: ${trackingHref}`,
+    `Booking dashboard: ${portalHref}`,
+    '',
+    '— ZentroSure',
+  );
   const text = textLines.join('\n');
 
   if (!transporter) {
-    console.warn('[mail] SMTP not configured; skipping inspector-assigned email to', to);
+    console.warn('[mail] SMTP not configured; skipping inspector-dispatched email to', to);
     return false;
   }
   try {
@@ -608,7 +637,8 @@ async function sendInspectorAssignedEmail(booking, inspector) {
       inspectorPhoneDisplay,
       inspectorEmailDisplay,
       inspectorCity,
-      portalHref
+      portalHref,
+      trackingHref,
     });
     await transporter.sendMail({
       from: env.smtp.from,
@@ -619,7 +649,7 @@ async function sendInspectorAssignedEmail(booking, inspector) {
     });
     return true;
   } catch (err) {
-    console.error('[mail] inspector-assigned send failed:', err.message || err);
+    console.error('[mail] inspector-dispatched send failed:', err.message || err);
     return false;
   }
 }

@@ -61,6 +61,7 @@ router.post(
   asyncHandler(booking.createCustomerBooking)
 );
 router.get('/bookings', asyncHandler(booking.myBookings));
+router.get('/bookings/:bookingNumber/track', asyncHandler(booking.trackBooking));
 router.patch('/bookings/:bookingNumber', asyncHandler(booking.patchMine));
 router.get('/bookings/:bookingNumber', asyncHandler(booking.getMine));
 router.get('/reports', asyncHandler(report.myReports));

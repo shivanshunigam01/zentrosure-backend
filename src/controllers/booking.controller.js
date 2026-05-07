@@ -1,6 +1,7 @@
 const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 const Booking = require('../models/Booking');
+const Inspector = require('../models/Inspector');
 const Service = require('../models/Service');
 const User = require('../models/User');
 const OtpSession = require('../models/OtpSession');
@@ -255,6 +256,91 @@ exports.patchMine = async (req, res) => {
   booking.history.push({ event: 'Booking details updated', meta: { by: req.user.id } });
   await booking.save();
   ok(res, booking);
+};
+
+/** Booking statuses where the inspector is en route / on the job and live tracking should be shown. */
+const TRACKABLE_STATUSES = new Set(['Assigned', 'Awaiting Inspector', 'Sent Back']);
+
+/**
+ * Customer live tracking payload — inspector current GPS, customer site GPS, and metadata.
+ * Tracking is "active" only after the inspector has accepted the booking and before submission.
+ */
+exports.trackBooking = async (req, res) => {
+  const booking = await Booking.findOne({
+    bookingNumber: req.params.bookingNumber,
+    customerId: req.user.id,
+  });
+  if (!booking) throw new ApiError(404, 'Booking not found', 'NOT_FOUND');
+
+  const accepted = booking.assignmentStatus === 'accepted';
+  const trackable = TRACKABLE_STATUSES.has(String(booking.status || ''));
+  const trackingActive = Boolean(accepted && trackable && booking.inspectorId);
+
+  let inspectorPayload = null;
+  if (booking.inspectorId) {
+    const insp = await Inspector.findById(booking.inspectorId).populate('userId', 'name email phone');
+    if (insp) {
+      const user = insp.userId && typeof insp.userId === 'object' ? insp.userId : null;
+      const cur = insp.currentLocation;
+      const hasFix =
+        cur && Number.isFinite(Number(cur.lat)) && Number.isFinite(Number(cur.lng));
+      inspectorPayload = {
+        name: (user && user.name) || '',
+        code: insp.inspectorCode || '',
+        phone: (user && user.phone) || '',
+        email: (user && user.email) || '',
+        avatarUrl: insp.avatarUrl || '',
+        rating: Number(insp.rating || 0),
+        currentLocation: hasFix
+          ? {
+              lat: Number(cur.lat),
+              lng: Number(cur.lng),
+              address: cur.address || '',
+              accuracyM: cur.accuracyM != null ? Number(cur.accuracyM) : null,
+              capturedAt: cur.capturedAt || null,
+              bookingNumber: cur.bookingNumber || '',
+            }
+          : null,
+      };
+    }
+  }
+
+  let trackingMessage = '';
+  if (!booking.inspectorId) {
+    trackingMessage = 'No inspector has been assigned to this booking yet.';
+  } else if (!accepted) {
+    trackingMessage = 'Inspector assignment is awaiting acceptance.';
+  } else if (!trackable) {
+    trackingMessage = 'This booking is not in the live-tracking window.';
+  } else if (!inspectorPayload?.currentLocation) {
+    trackingMessage = 'Inspector has not shared a live GPS fix yet — tracking will start as soon as they enable location.';
+  }
+
+  ok(res, {
+    bookingNumber: booking.bookingNumber,
+    status: booking.status,
+    assignmentStatus: booking.assignmentStatus,
+    trackingActive,
+    trackingMessage,
+    scheduledDate: booking.scheduledDate || null,
+    slot: booking.slot || '',
+    visitVerifiedAt: booking.visitVerifiedAt || null,
+    customer: {
+      name: booking.customerName || '',
+      phone: booking.phone || '',
+      address: booking.address || '',
+      city: booking.city || '',
+      lat:
+        booking.addressLatitude != null && Number.isFinite(Number(booking.addressLatitude))
+          ? Number(booking.addressLatitude)
+          : null,
+      lng:
+        booking.addressLongitude != null && Number.isFinite(Number(booking.addressLongitude))
+          ? Number(booking.addressLongitude)
+          : null,
+    },
+    inspector: inspectorPayload,
+  });
 };
 
 /**
