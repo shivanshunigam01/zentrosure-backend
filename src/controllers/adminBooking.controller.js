@@ -9,6 +9,10 @@ const { normalizeIndianPhone } = require('../utils/phone');
 const mail = require('../services/mail.service');
 const bookingWhatsapp = require('../services/bookingWhatsapp.service');
 const { applyBookingDetailPatch } = require('../utils/bookingPatch');
+const {
+  assertBookingAllowsChecklistReplace,
+  syncSubmissionAndArtifactsAfterChecklistChange,
+} = require('../utils/checklistSubmissionSync');
 const xlsx = require('xlsx');
 
 function optionalCreateDetailFields(body) {
@@ -195,7 +199,10 @@ exports.patchBookingDetails = async (req, res) => {
 };
 exports.patchChecklist = async (req, res) => {
   const booking = await findBooking(req.params.bookingNumber);
-  booking.checklist = req.body.checklist || [];
+  assertBookingAllowsChecklistReplace(booking);
+  const nextChecklist = req.body.checklist || [];
+  booking.checklist = nextChecklist;
+  syncSubmissionAndArtifactsAfterChecklistChange(booking, nextChecklist, { source: 'admin_patch' });
   if (req.body.lockChecklist === true) {
     booking.checklistLocked = true;
     booking.checklistLockedAt = new Date();

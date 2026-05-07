@@ -1,9 +1,14 @@
 const mongoose = require('mongoose');
 const xlsx = require('xlsx');
+const Booking = require('../models/Booking');
 const { BlogPost, Faq, CityPage, PopularModelImage, Testimonial, ChecklistTemplate } = require('../models/Content');
 const ApiError = require('../utils/apiError');
 const { ok } = require('../utils/response');
 const { publicFileUrl } = require('../services/storage.service');
+const {
+  assertBookingAllowsChecklistReplace,
+  syncSubmissionAndArtifactsAfterChecklistChange,
+} = require('../utils/checklistSubmissionSync');
 
 function requireId(id) {
   if (!mongoose.Types.ObjectId.isValid(id)) throw new ApiError(400, 'Invalid id', 'VALIDATION');
@@ -18,33 +23,188 @@ function slugId(v) {
     .slice(0, 80);
 }
 
-function parseChecklistFieldsFromWorkbook(fileBuffer) {
-  const wb = xlsx.read(fileBuffer, { type: 'buffer' });
-  const firstSheetName = wb.SheetNames?.[0];
-  if (!firstSheetName) return [];
-  const ws = wb.Sheets[firstSheetName];
-  const rows = xlsx.utils.sheet_to_json(ws, { header: 1, raw: false, defval: '' });
+/** Map header labels (first row) to column indexes for structured ZentroSure templates. */
+function mapChecklistHeaderColumns(headerRow) {
+  const headers = headerRow.map((c) => String(c ?? '').trim());
+  const lower = headers.map((h) => h.toLowerCase().replace(/\s+/g, ' '));
+  /** Prefer longest / most specific substring matches first (order of patterns matters). */
+  const findColLoose = (patterns) => {
+    for (const p of patterns) {
+      for (let i = 0; i < lower.length; i += 1) {
+        const cell = lower[i];
+        if (cell === p || cell.includes(p)) return i;
+      }
+    }
+    return -1;
+  };
+  /** Row-level required flag — must not match "photo required" etc. */
+  const findColRequiredFlag = () => {
+    for (let i = 0; i < lower.length; i += 1) {
+      const cell = lower[i];
+      if (/photo|picture|image|capture|min\s*photos/.test(cell)) continue;
+      const norm = cell.replace(/\s*\??\s*$/u, '').trim();
+      if (norm === 'required' || norm === 'mandatory' || norm === 'is required') return i;
+    }
+    return -1;
+  };
+  /** Avoid matching "Notes" via substring "no". */
+  const findColOrder = () => {
+    const primary = [
+      'display order',
+      'sort order',
+      'sequence',
+      'sr no',
+      's.no',
+      's no',
+      'sl no',
+      'serial no',
+    ];
+    const idx = findColLoose(primary);
+    if (idx >= 0) return idx;
+    for (let i = 0; i < lower.length; i += 1) {
+      const c = lower[i];
+      if (c === 'order' || c === 'seq' || c === '#' || c === 'no.' || /^s\.?\s*no\.?$/i.test(String(headers[i] ?? '').trim())) {
+        return i;
+      }
+    }
+    return -1;
+  };
+  const orderCol = findColOrder();
+  return {
+    section: findColLoose(['section', 'category', 'group']),
+    title: findColLoose(['checklist title', 'checkpoint', 'check point', 'inspection item', 'item title']),
+    fieldType: findColLoose(['field type', 'fieldtype']),
+    instructions: findColLoose(['instructions', 'guidance', 'hint']),
+    options: findColLoose(['inspector options', 'condition options', 'dropdown options', 'choices']),
+    photoRequired: findColLoose(['photo required', 'photos required', 'capture photo']),
+    minPhotos: findColLoose(['min photos', 'minimum photos']),
+    notesAllowed: findColLoose(['notes allowed', 'remarks allowed', 'allow remarks', 'remarks ok']),
+    required: findColRequiredFlag(),
+    order: orderCol,
+  };
+}
+
+function parseStructuredChecklistRows(rows) {
+  let headerIdx = -1;
+  let col = null;
+  const scanLimit = Math.min(rows.length, 50);
+  for (let i = 0; i < scanLimit; i += 1) {
+    const rowRaw = rows[i];
+    if (!Array.isArray(rowRaw)) continue;
+    const headerCells = rowRaw.map((c) => String(c ?? '').trim());
+    if (!headerCells.some(Boolean)) continue;
+    const mapped = mapChecklistHeaderColumns(headerCells);
+    if (mapped.title >= 0) {
+      headerIdx = i;
+      col = mapped;
+      break;
+    }
+  }
+  if (headerIdx < 0 || !col || col.title < 0) return [];
+
+  const fields = [];
+  for (let i = headerIdx + 1; i < rows.length; i += 1) {
+    const rowRaw = rows[i];
+    if (!Array.isArray(rowRaw)) continue;
+    const row = rowRaw.map((c) => String(c ?? '').trim());
+    const title = row[col.title] || '';
+    if (!title || title.length < 2) continue;
+    const rowJoined = row.join(' ').toLowerCase();
+    if (/checklist\s*title/i.test(title) && rowJoined.includes('section')) continue;
+
+    const section = col.section >= 0 ? String(row[col.section] ?? '').trim() : '';
+    let instructions = col.instructions >= 0 ? String(row[col.instructions] ?? '').trim() : '';
+    if (!instructions && col.fieldType >= 0) {
+      const ft = String(row[col.fieldType] ?? '').trim();
+      if (ft) instructions = `Field type: ${ft}`.slice(0, 500);
+    }
+
+    let options = [];
+    if (col.options >= 0 && row[col.options]) {
+      options = String(row[col.options])
+        .split(/[,;/|]/)
+        .map((s) => s.trim())
+        .filter(Boolean)
+        .slice(0, 12);
+    }
+
+    let minPhotos = col.minPhotos >= 0 ? Number(row[col.minPhotos]) : 0;
+    if (!Number.isFinite(minPhotos)) minPhotos = 0;
+    minPhotos = Math.max(0, Math.min(20, Math.round(minPhotos)));
+
+    const photoReq =
+      col.photoRequired >= 0 ? String(row[col.photoRequired] ?? '').trim().toLowerCase() : '';
+    if ((photoReq === 'yes' || photoReq === 'y' || photoReq === 'true' || photoReq === '1') && minPhotos === 0) {
+      minPhotos = 1;
+    }
+
+    const reqCell = col.required >= 0 ? String(row[col.required] ?? '').trim().toLowerCase() : '';
+    const required =
+      reqCell === 'yes' ||
+      reqCell === 'y' ||
+      reqCell === 'true' ||
+      reqCell === '1' ||
+      reqCell === 'mandatory';
+
+    const notesCell = col.notesAllowed >= 0 ? String(row[col.notesAllowed] ?? '').trim().toLowerCase() : '';
+    const enableRemarks = !(notesCell === 'no' || notesCell === 'n' || notesCell === 'false' || notesCell === '0');
+
+    const label = section ? `${section} — ${title}`.slice(0, 220) : title.slice(0, 220);
+    const enableCondition = options.length > 0;
+    const conditionOptions = enableCondition ? options : ['OK', 'NOK', 'Minor', 'Major'];
+
+    let ord = col.order >= 0 ? Number(row[col.order]) : NaN;
+    if (!Number.isFinite(ord)) ord = fields.length + 1;
+
+    const idBase = slugId(`${section}-${title}`) || `field-${fields.length + 1}`;
+    fields.push({
+      id: `${idBase}-${fields.length + 1}`,
+      label,
+      instructions: instructions.slice(0, 500),
+      required,
+      minPhotos,
+      enableCondition,
+      conditionOptions,
+      enableRemarks,
+      _sortOrder: ord,
+    });
+  }
+  fields.sort((a, b) => (a._sortOrder ?? 0) - (b._sortOrder ?? 0));
+  fields.forEach((f) => {
+    delete f._sortOrder;
+  });
+  return fields;
+}
+
+/** Legacy free-form Excel (section rows + label column A). Kept for older templates. */
+function parseLegacyChecklistRows(rows) {
   const fields = [];
   let currentSection = 'General';
   for (const rowRaw of rows) {
-    const row = Array.isArray(rowRaw)
-      ? rowRaw.map((c) => String(c ?? '').trim()).filter(Boolean)
-      : [];
-    if (!row.length) continue;
-    const rowJoined = row.join(' ').toLowerCase();
+    const row = Array.isArray(rowRaw) ? rowRaw.map((c) => String(c ?? '').trim()) : [];
+    const rowJoinedAll = row.join(' ').toLowerCase();
+    if (/checklist\s*title/.test(rowJoinedAll) && /section/.test(rowJoinedAll)) continue;
+    const cellsWithText = row.filter(Boolean);
+    if (!cellsWithText.length) continue;
+    const rowJoined = cellsWithText.join(' ').toLowerCase();
     if (/^(s\.?no|sr\.? no|serial|check ?point|checkpoint|remarks?|status|ok\/ng|mandatory|required)$/.test(rowJoined)) {
       continue;
     }
-    if (row.length === 1 && row[0].length <= 70 && !/[0-9]{3,}/.test(row[0])) {
-      currentSection = row[0];
+    if (cellsWithText.length === 1 && cellsWithText[0].length <= 70 && !/[0-9]{3,}/.test(cellsWithText[0])) {
+      currentSection = cellsWithText[0];
       continue;
     }
-    const label = row[0];
+    const label = cellsWithText[0];
     if (!label || label.length < 2) continue;
     const required = /(required|mandatory|must|yes|y)/i.test(rowJoined);
-    const minPhotosMatch = rowJoined.match(/(?:min|minimum)?\s*photos?\s*[:\-]?\s*(\d+)/i) || rowJoined.match(/\b(\d+)\s*photos?\b/i);
-    const minPhotos = minPhotosMatch ? Math.max(0, Math.min(20, Number(minPhotosMatch[1] || 0))) : (required ? 1 : 0);
-    const instructions = row.slice(1).join(' | ').slice(0, 500);
+    const minPhotosMatch =
+      rowJoined.match(/(?:min|minimum)?\s*photos?\s*[:\-]?\s*(\d+)/i) || rowJoined.match(/\b(\d+)\s*photos?\b/i);
+    const minPhotos = minPhotosMatch
+      ? Math.max(0, Math.min(20, Number(minPhotosMatch[1] || 0)))
+      : required
+        ? 1
+        : 0;
+    const instructions = cellsWithText.slice(1).join(' | ').slice(0, 500);
     const idBase = slugId(`${currentSection}-${label}`) || `field-${fields.length + 1}`;
     fields.push({
       id: `${idBase}-${fields.length + 1}`,
@@ -58,6 +218,18 @@ function parseChecklistFieldsFromWorkbook(fileBuffer) {
     });
   }
   return fields;
+}
+
+function parseChecklistFieldsFromWorkbook(fileBuffer) {
+  const wb = xlsx.read(fileBuffer, { type: 'buffer' });
+  const preferred =
+    wb.SheetNames.find((n) => /checklist/i.test(String(n))) || wb.SheetNames?.[0];
+  if (!preferred) return [];
+  const ws = wb.Sheets[preferred];
+  const rows = xlsx.utils.sheet_to_json(ws, { header: 1, raw: false, defval: '' });
+  const structured = parseStructuredChecklistRows(rows);
+  if (structured.length) return structured;
+  return parseLegacyChecklistRows(rows);
 }
 
 function normalizeChecklistFields(rawFields) {
@@ -291,8 +463,34 @@ exports.checklistTemplateUploadExcel = async (req, res) => {
   if (!serviceSlug) throw new ApiError(400, 'serviceSlug is required', 'VALIDATION');
   const title = String(req.body.title || req.file.originalname || '').trim();
   if (!title) throw new ApiError(400, 'title is required', 'VALIDATION');
+  const bookingNumber = String(req.body.bookingNumber || req.body.applyBookingNumber || '').trim();
+  const explicitApply =
+    req.body.applyToBooking === true ||
+    req.body.applyToBooking === 'true' ||
+    req.body.applyToBooking === '1';
+  if (explicitApply && !bookingNumber) {
+    throw new ApiError(400, 'bookingNumber is required when applyToBooking is set', 'VALIDATION');
+  }
+  const applyToBooking = explicitApply || Boolean(bookingNumber);
+
   const fields = normalizeChecklistFields(parseChecklistFieldsFromWorkbook(req.file.buffer));
   if (!fields.length) throw new ApiError(400, 'No checklist rows found in the uploaded sheet', 'VALIDATION');
+
+  let booking = null;
+  if (applyToBooking && bookingNumber) {
+    booking = await Booking.findOne({ bookingNumber });
+    if (!booking) throw new ApiError(404, 'Booking not found for bookingNumber', 'NOT_FOUND');
+    const bookingSlug = String(booking.serviceSlug || '').trim().toLowerCase();
+    if (bookingSlug !== serviceSlug) {
+      throw new ApiError(
+        400,
+        `serviceSlug mismatch: booking is "${bookingSlug}" but upload used "${serviceSlug}"`,
+        'VALIDATION',
+      );
+    }
+    assertBookingAllowsChecklistReplace(booking);
+  }
+
   const row = await ChecklistTemplate.create({
     title,
     serviceSlug,
@@ -301,5 +499,24 @@ exports.checklistTemplateUploadExcel = async (req, res) => {
     locked: false,
     active: true,
   });
-  ok(res, row, 201);
+
+  if (booking) {
+    booking.checklist = fields;
+    booking.checklistTemplateTitle = title;
+    syncSubmissionAndArtifactsAfterChecklistChange(booking, fields, {
+      source: 'excel_import',
+      templateId: row._id,
+    });
+    booking.history.push({
+      event: 'Checklist imported from Excel',
+      meta: {
+        templateId: row._id,
+        sourceFileName: String(req.file.originalname || ''),
+        by: req.user?.id,
+      },
+    });
+    await booking.save();
+  }
+
+  ok(res, booking ? { template: row, booking } : row, 201);
 };
