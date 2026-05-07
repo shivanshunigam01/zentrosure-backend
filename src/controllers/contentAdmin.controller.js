@@ -184,6 +184,12 @@ function parseStructuredChecklistRows(rows) {
     const notesCell = col.notesAllowed >= 0 ? String(row[col.notesAllowed] ?? '').trim().toLowerCase() : '';
     const enableRemarks = !(notesCell === 'no' || notesCell === 'n' || notesCell === 'false' || notesCell === '0');
 
+    const photoRequiredBool =
+      photoReq === 'yes' ||
+      photoReq === 'y' ||
+      photoReq === 'true' ||
+      photoReq === '1';
+
     const label = section ? `${section} — ${title}`.slice(0, 220) : title.slice(0, 220);
 
     let ord = col.order >= 0 ? Number(row[col.order]) : NaN;
@@ -193,8 +199,12 @@ function parseStructuredChecklistRows(rows) {
     fields.push({
       id: `${idBase}-${fields.length + 1}`,
       label,
+      section: section.slice(0, 120),
+      checklistTitle: title.slice(0, 220),
       fieldType: fieldTypeCell,
       instructions,
+      photoRequired: photoRequiredBool,
+      displayOrder: ord,
       required,
       minPhotos,
       enableCondition,
@@ -243,8 +253,12 @@ function parseLegacyChecklistRows(rows) {
     fields.push({
       id: `${idBase}-${fields.length + 1}`,
       label: `${currentSection !== 'General' ? `${currentSection} - ` : ''}${label}`.slice(0, 220),
+      section: currentSection !== 'General' ? currentSection.slice(0, 120) : '',
+      checklistTitle: label.slice(0, 220),
       fieldType: '',
       instructions,
+      photoRequired: minPhotos > 0,
+      displayOrder: fields.length + 1,
       required,
       minPhotos,
       enableCondition: true,
@@ -284,8 +298,12 @@ function normalizeChecklistFields(rawFields) {
     return {
       id: idRaw || `field-${idx + 1}`,
       label: labelRaw || `Field ${idx + 1}`,
+      section: f?.section != null ? String(f.section).trim().slice(0, 120) : '',
+      checklistTitle: f?.checklistTitle != null ? String(f.checklistTitle).trim().slice(0, 220) : '',
       fieldType: f?.fieldType != null ? String(f.fieldType).trim().slice(0, 80) : '',
       instructions: String(f?.instructions || '').trim(),
+      photoRequired: Boolean(f?.photoRequired),
+      displayOrder: Math.max(0, Math.min(50000, Number(f?.displayOrder ?? 0) || 0)),
       required: Boolean(f?.required),
       minPhotos: Math.max(0, Math.min(20, Number(f?.minPhotos ?? 0) || 0)),
       enableCondition,

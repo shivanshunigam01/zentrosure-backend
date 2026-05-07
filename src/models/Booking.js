@@ -3,9 +3,17 @@ const mongoose = require('mongoose');
 const CHECKLIST_FIELD = new mongoose.Schema({
   id: String,
   label: String,
+  /** Excel Section column (also embedded in label for search). */
+  section: { type: String, trim: true, default: '' },
+  /** Excel Checklist Title column. */
+  checklistTitle: { type: String, trim: true, default: '' },
   /** Template column e.g. dropdown, photo, text — not shown as instructions. */
   fieldType: { type: String, trim: true, default: '' },
   instructions: String,
+  /** Excel Photo Required column (Yes/No). */
+  photoRequired: { type: Boolean, default: false },
+  /** Excel Display Order (for reference in admin / inspector UI). */
+  displayOrder: { type: Number, default: 0 },
   required: { type: Boolean, default: false },
   minPhotos: { type: Number, default: 0 },
   /** Inspector can pick health/severity per checklist row (OK/NOK/Minor/Major). */
