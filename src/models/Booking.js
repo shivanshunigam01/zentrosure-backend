@@ -3,6 +3,8 @@ const mongoose = require('mongoose');
 const CHECKLIST_FIELD = new mongoose.Schema({
   id: String,
   label: String,
+  /** Template column e.g. dropdown, photo, text — not shown as instructions. */
+  fieldType: { type: String, trim: true, default: '' },
   instructions: String,
   required: { type: Boolean, default: false },
   minPhotos: { type: Number, default: 0 },

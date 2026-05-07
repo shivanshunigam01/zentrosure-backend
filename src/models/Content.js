@@ -21,6 +21,7 @@ const testimonialSchema = new mongoose.Schema({
 const checklistFieldSchema = new mongoose.Schema({
   id: { type: String, required: true, trim: true },
   label: { type: String, required: true, trim: true },
+  fieldType: { type: String, default: '', trim: true },
   instructions: { type: String, default: '', trim: true },
   required: { type: Boolean, default: false },
   minPhotos: { type: Number, default: 0 },

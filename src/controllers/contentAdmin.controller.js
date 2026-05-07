@@ -74,7 +74,14 @@ function mapChecklistHeaderColumns(headerRow) {
     section: findColLoose(['section', 'category', 'group']),
     title: findColLoose(['checklist title', 'checkpoint', 'check point', 'inspection item', 'item title']),
     fieldType: findColLoose(['field type', 'fieldtype']),
-    instructions: findColLoose(['instructions', 'guidance', 'hint']),
+    instructions: findColLoose([
+      'instructions',
+      'guidance',
+      'hint',
+      'inspector instructions',
+      'guidelines',
+      'description',
+    ]),
     options: findColLoose(['inspector options', 'condition options', 'dropdown options', 'choices']),
     photoRequired: findColLoose(['photo required', 'photos required', 'capture photo']),
     minPhotos: findColLoose(['min photos', 'minimum photos']),
@@ -82,6 +89,26 @@ function mapChecklistHeaderColumns(headerRow) {
     required: findColRequiredFlag(),
     order: orderCol,
   };
+}
+
+/** Excel "Field Type" cell — stored separately, never as instructions. */
+function checklistFieldTypeFromCell(raw) {
+  return String(raw ?? '').trim().slice(0, 80);
+}
+
+/**
+ * Whether inspector should pick a condition / dropdown value for this row.
+ * Uses Inspector Options when present; otherwise infers from field type name.
+ */
+function inferEnableConditionFromFieldType(fieldTypeLower, hasInspectorOptions) {
+  if (hasInspectorOptions) return true;
+  const ft = fieldTypeLower.replace(/\s+/g, ' ').trim();
+  if (!ft) return true;
+  if (/dropdown|drop\s*-?\s*down|select|choice|choices|radio|list|pick|multi|combo/.test(ft)) return true;
+  if (/photo|image|capture|picture|camera|file\s*upload|attachment/.test(ft)) return false;
+  if (/text|textarea|note|notes\s*only|number|numeric|date|time|plain/.test(ft)) return false;
+  if (/check|checkbox|boolean|yes\s*\/?\s*no|toggle/.test(ft)) return true;
+  return true;
 }
 
 function parseStructuredChecklistRows(rows) {
@@ -113,11 +140,11 @@ function parseStructuredChecklistRows(rows) {
     if (/checklist\s*title/i.test(title) && rowJoined.includes('section')) continue;
 
     const section = col.section >= 0 ? String(row[col.section] ?? '').trim() : '';
-    let instructions = col.instructions >= 0 ? String(row[col.instructions] ?? '').trim() : '';
-    if (!instructions && col.fieldType >= 0) {
-      const ft = String(row[col.fieldType] ?? '').trim();
-      if (ft) instructions = `Field type: ${ft}`.slice(0, 500);
-    }
+    const instructions =
+      col.instructions >= 0 ? String(row[col.instructions] ?? '').trim().slice(0, 500) : '';
+
+    const fieldTypeCell = col.fieldType >= 0 ? checklistFieldTypeFromCell(row[col.fieldType]) : '';
+    const fieldTypeLower = fieldTypeCell.toLowerCase();
 
     let options = [];
     if (col.options >= 0 && row[col.options]) {
@@ -127,6 +154,14 @@ function parseStructuredChecklistRows(rows) {
         .filter(Boolean)
         .slice(0, 12);
     }
+
+    const hasInspectorOptions = options.length > 0;
+    const enableCondition = inferEnableConditionFromFieldType(fieldTypeLower, hasInspectorOptions);
+    const conditionOptions = enableCondition
+      ? hasInspectorOptions
+        ? options
+        : ['OK', 'NOK', 'Minor', 'Major']
+      : [];
 
     let minPhotos = col.minPhotos >= 0 ? Number(row[col.minPhotos]) : 0;
     if (!Number.isFinite(minPhotos)) minPhotos = 0;
@@ -150,8 +185,6 @@ function parseStructuredChecklistRows(rows) {
     const enableRemarks = !(notesCell === 'no' || notesCell === 'n' || notesCell === 'false' || notesCell === '0');
 
     const label = section ? `${section} — ${title}`.slice(0, 220) : title.slice(0, 220);
-    const enableCondition = options.length > 0;
-    const conditionOptions = enableCondition ? options : ['OK', 'NOK', 'Minor', 'Major'];
 
     let ord = col.order >= 0 ? Number(row[col.order]) : NaN;
     if (!Number.isFinite(ord)) ord = fields.length + 1;
@@ -160,7 +193,8 @@ function parseStructuredChecklistRows(rows) {
     fields.push({
       id: `${idBase}-${fields.length + 1}`,
       label,
-      instructions: instructions.slice(0, 500),
+      fieldType: fieldTypeCell,
+      instructions,
       required,
       minPhotos,
       enableCondition,
@@ -209,6 +243,7 @@ function parseLegacyChecklistRows(rows) {
     fields.push({
       id: `${idBase}-${fields.length + 1}`,
       label: `${currentSection !== 'General' ? `${currentSection} - ` : ''}${label}`.slice(0, 220),
+      fieldType: '',
       instructions,
       required,
       minPhotos,
@@ -237,17 +272,24 @@ function normalizeChecklistFields(rawFields) {
   return rawFields.map((f, idx) => {
     const idRaw = String(f?.id || '').trim();
     const labelRaw = String(f?.label || '').trim();
+    const enableCondition = f?.enableCondition !== false;
     const optionsRaw = Array.isArray(f?.conditionOptions)
       ? f.conditionOptions.map((x) => String(x || '').trim()).filter(Boolean)
-      : ['OK', 'NOK', 'Minor', 'Major'];
+      : [];
+    const conditionOptions = enableCondition
+      ? optionsRaw.length
+        ? optionsRaw
+        : ['OK', 'NOK', 'Minor', 'Major']
+      : [];
     return {
       id: idRaw || `field-${idx + 1}`,
       label: labelRaw || `Field ${idx + 1}`,
+      fieldType: f?.fieldType != null ? String(f.fieldType).trim().slice(0, 80) : '',
       instructions: String(f?.instructions || '').trim(),
       required: Boolean(f?.required),
       minPhotos: Math.max(0, Math.min(20, Number(f?.minPhotos ?? 0) || 0)),
-      enableCondition: f?.enableCondition !== false,
-      conditionOptions: optionsRaw.length ? optionsRaw : ['OK', 'NOK', 'Minor', 'Major'],
+      enableCondition,
+      conditionOptions,
       enableRemarks: f?.enableRemarks !== false
     };
   });
