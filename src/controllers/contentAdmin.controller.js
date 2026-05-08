@@ -9,6 +9,7 @@ const {
   assertBookingAllowsChecklistReplace,
   syncSubmissionAndArtifactsAfterChecklistChange,
 } = require('../utils/checklistSubmissionSync');
+const { normalizeChecklistScoreWeights } = require('../utils/inspectionScore');
 
 function requireId(id) {
   if (!mongoose.Types.ObjectId.isValid(id)) throw new ApiError(400, 'Invalid id', 'VALIDATION');
@@ -88,6 +89,15 @@ function mapChecklistHeaderColumns(headerRow) {
     notesAllowed: findColLoose(['notes allowed', 'remarks allowed', 'allow remarks', 'remarks ok']),
     required: findColRequiredFlag(),
     order: orderCol,
+    scoreWeight: findColLoose([
+      'score weight',
+      'weight %',
+      'weight',
+      'points',
+      'score %',
+      '% of total',
+      '% weight'
+    ]),
   };
 }
 
@@ -195,6 +205,12 @@ function parseStructuredChecklistRows(rows) {
     let ord = col.order >= 0 ? Number(row[col.order]) : NaN;
     if (!Number.isFinite(ord)) ord = fields.length + 1;
 
+    let scoreWeight = null;
+    if (col.scoreWeight >= 0 && row[col.scoreWeight] !== undefined && String(row[col.scoreWeight]).trim() !== '') {
+      const sw = Number(String(row[col.scoreWeight]).replace(/%/g, '').trim());
+      if (Number.isFinite(sw)) scoreWeight = Math.max(0, Math.min(100, sw));
+    }
+
     const idBase = slugId(`${section}-${title}`) || `field-${fields.length + 1}`;
     fields.push({
       id: `${idBase}-${fields.length + 1}`,
@@ -210,6 +226,7 @@ function parseStructuredChecklistRows(rows) {
       enableCondition,
       conditionOptions,
       enableRemarks,
+      ...(scoreWeight != null ? { scoreWeight } : {}),
       _sortOrder: ord,
     });
   }
@@ -283,7 +300,7 @@ function parseChecklistFieldsFromWorkbook(fileBuffer) {
 
 function normalizeChecklistFields(rawFields) {
   if (!Array.isArray(rawFields)) return [];
-  return rawFields.map((f, idx) => {
+  const mapped = rawFields.map((f, idx) => {
     const idRaw = String(f?.id || '').trim();
     const labelRaw = String(f?.label || '').trim();
     const enableCondition = f?.enableCondition !== false;
@@ -295,7 +312,12 @@ function normalizeChecklistFields(rawFields) {
         ? optionsRaw
         : ['OK', 'NOK', 'Minor', 'Major']
       : [];
-    return {
+    let scoreWeight = null;
+    if (f?.scoreWeight != null && f.scoreWeight !== '') {
+      const sw = Number(f.scoreWeight);
+      if (Number.isFinite(sw)) scoreWeight = Math.max(0, Math.min(100, sw));
+    }
+    const row = {
       id: idRaw || `field-${idx + 1}`,
       label: labelRaw || `Field ${idx + 1}`,
       section: f?.section != null ? String(f.section).trim().slice(0, 120) : '',
@@ -310,7 +332,10 @@ function normalizeChecklistFields(rawFields) {
       conditionOptions,
       enableRemarks: f?.enableRemarks !== false
     };
+    if (scoreWeight != null) row.scoreWeight = scoreWeight;
+    return row;
   });
+  return normalizeChecklistScoreWeights(mapped);
 }
 
 // --- Blog ---

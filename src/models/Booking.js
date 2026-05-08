@@ -23,7 +23,9 @@ const CHECKLIST_FIELD = new mongoose.Schema({
     default: ['OK', 'NOK', 'Minor', 'Major']
   },
   /** Inspector can write a free-text remark for this row. */
-  enableRemarks: { type: Boolean, default: true }
+  enableRemarks: { type: Boolean, default: true },
+  /** Share of total certificate score (weights normalized to sum 100 per checklist). */
+  scoreWeight: { type: Number, default: null }
 }, { _id: false });
 
 const CAPTURED_IMAGE = new mongoose.Schema({
@@ -54,13 +56,23 @@ const INSPECTOR_SUBMISSION = new mongoose.Schema({
   overallNotes: String
 }, { _id: false });
 
+const SCORE_BREAKDOWN_ROW = new mongoose.Schema({
+  fieldId: String,
+  label: String,
+  weight: Number,
+  earned: Number,
+  pass: Boolean,
+  condition: String
+}, { _id: false });
+
 const REPORT_DATA = new mongoose.Schema({
   reportId: { type: String, index: true },
   publishedAt: Date,
   score: Number,
   verdict: String,
   adminNotes: String,
-  highlights: [String]
+  highlights: [String],
+  scoreBreakdown: { type: [SCORE_BREAKDOWN_ROW], default: undefined }
 }, { _id: false });
 
 const bookingSchema = new mongoose.Schema({

@@ -32,6 +32,7 @@ const checklistFieldSchema = new mongoose.Schema({
   enableCondition: { type: Boolean, default: true },
   conditionOptions: { type: [String], default: ['OK', 'NOK', 'Minor', 'Major'] },
   enableRemarks: { type: Boolean, default: true },
+  scoreWeight: { type: Number, default: null },
 }, { _id: false });
 const checklistTemplateSchema = new mongoose.Schema({
   title: { type: String, required: true, trim: true },

@@ -13,6 +13,7 @@ const {
   assertBookingAllowsChecklistReplace,
   syncSubmissionAndArtifactsAfterChecklistChange,
 } = require('../utils/checklistSubmissionSync');
+const { normalizeChecklistScoreWeights, computeInspectionScore } = require('../utils/inspectionScore');
 const xlsx = require('xlsx');
 
 function optionalCreateDetailFields(body) {
@@ -200,7 +201,7 @@ exports.patchBookingDetails = async (req, res) => {
 exports.patchChecklist = async (req, res) => {
   const booking = await findBooking(req.params.bookingNumber);
   assertBookingAllowsChecklistReplace(booking);
-  const nextChecklist = req.body.checklist || [];
+  const nextChecklist = normalizeChecklistScoreWeights(req.body.checklist || []);
   booking.checklist = nextChecklist;
   syncSubmissionAndArtifactsAfterChecklistChange(booking, nextChecklist, { source: 'admin_patch' });
   if (req.body.lockChecklist === true) {
@@ -258,8 +259,17 @@ exports.verify = async (req, res) => {
 exports.publishReport = async (req, res) => {
   const booking = await findBooking(req.params.bookingNumber);
   if (booking.status !== 'Verified') throw new ApiError(409, 'Verify booking before publishing report', 'INVALID_TRANSITION');
+  const { score, breakdown } = computeInspectionScore(booking.checklist || [], booking.submission || { fields: [] });
   booking.status = 'Report Published';
-  booking.report = { reportId: req.body.reportId || generateReportId(booking.bookingNumber), publishedAt: new Date(), score: req.body.score, verdict: req.body.verdict, adminNotes: req.body.adminNotes, highlights: req.body.highlights || [] };
+  booking.report = {
+    reportId: req.body.reportId || generateReportId(booking.bookingNumber),
+    publishedAt: new Date(),
+    score,
+    verdict: req.body.verdict,
+    adminNotes: req.body.adminNotes,
+    highlights: req.body.highlights || [],
+    scoreBreakdown: breakdown
+  };
   booking.history.push({ event: 'Report published', meta: { reportId: booking.report.reportId, by: req.user.id } });
   await booking.save();
 
