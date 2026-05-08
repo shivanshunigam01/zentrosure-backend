@@ -103,6 +103,49 @@ function normalizeChecklistOptions(options) {
   return cleaned.length ? cleaned : ['OK', 'NOK', 'Minor', 'Major'];
 }
 
+/** Mirrors mobile `getInspectorCaptureMode` / Excel rules so submit validation matches the inspector UI. */
+function inspectorCaptureMode(item) {
+  const ft = String(item.fieldType ?? '')
+    .trim()
+    .toLowerCase();
+  if (/text|textarea|input|number|numeric|string|^note$|notes|manual|free|comment|alphabet/.test(ft)) {
+    return 'text';
+  }
+  if (/dropdown|drop\s*-?down|select|choice|choices|radio|list|pick|combo|multi/.test(ft)) {
+    return 'dropdown';
+  }
+  if (/photo|image|capture|picture|camera|file|attachment/.test(ft)) {
+    return 'none';
+  }
+  if (item.enableCondition !== false && Array.isArray(item.conditionOptions) && item.conditionOptions.length > 0) {
+    return 'dropdown';
+  }
+  return 'none';
+}
+
+function requiresConditionPick(item) {
+  if (!item.required || item.enableCondition === false) return false;
+  return inspectorCaptureMode(item) === 'dropdown';
+}
+
+function requiresTextNotes(item) {
+  if (!item.required) return false;
+  return inspectorCaptureMode(item) === 'text';
+}
+
+function effectiveMinPhotos(item) {
+  if (!item.required) return 0;
+  const m = item.minPhotos != null ? Number(item.minPhotos) : 0;
+  return Math.max(0, Number.isFinite(m) ? m : 0);
+}
+
+function findSubmittedRow(fields, item) {
+  const id = item.id != null ? String(item.id).trim() : '';
+  const hit = fields.find((f) => String(f.fieldId ?? '').trim() === id);
+  if (hit || !id) return hit;
+  return fields.find((f) => String(f.fieldId ?? '').trim() === String(item.fieldId ?? '').trim());
+}
+
 exports.submit = async (req, res) => {
   const inspector = await myInspector(req);
   const booking = await Booking.findOne({ bookingNumber: req.params.bookingNumber, inspectorId: inspector._id });
@@ -120,20 +163,30 @@ exports.submit = async (req, res) => {
     }
   }
   for (const item of booking.checklist || []) {
-    const submitted = fields.find((f) => f.fieldId === item.id);
+    const submitted = findSubmittedRow(fields, item);
     if (item.enableCondition) {
       const allowed = normalizeChecklistOptions(item.conditionOptions);
       const picked = submitted?.condition != null ? String(submitted.condition).trim() : '';
       if (picked && !allowed.includes(picked)) {
         throw new ApiError(400, `${item.label} condition must be one of: ${allowed.join(', ')}`, 'VALIDATION_ERROR');
       }
-      if (item.required && !picked) {
+    }
+    if (requiresConditionPick(item)) {
+      const picked = submitted?.condition != null ? String(submitted.condition).trim() : '';
+      if (!picked) {
         throw new ApiError(400, `${item.label} requires selecting a condition`, 'VALIDATION_ERROR');
       }
     }
-    if (item.required) {
-      const photos = submitted?.images?.length || 0;
-      if (photos < (item.minPhotos || 0)) throw new ApiError(400, `${item.label} requires minimum ${item.minPhotos} photo(s)`, 'VALIDATION_ERROR');
+    if (requiresTextNotes(item)) {
+      const notes = submitted?.notes != null ? String(submitted.notes).trim() : '';
+      if (!notes) {
+        throw new ApiError(400, `${item.label} requires a text entry`, 'VALIDATION_ERROR');
+      }
+    }
+    const photos = submitted?.images?.length || 0;
+    const minPhotos = effectiveMinPhotos(item);
+    if (photos < minPhotos) {
+      throw new ApiError(400, `${item.label} requires minimum ${minPhotos} photo(s)`, 'VALIDATION_ERROR');
     }
   }
   const sanitizedFields = fields.map((f) => ({
