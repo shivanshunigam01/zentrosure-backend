@@ -1,6 +1,11 @@
 /**
  * Checklist score weights (sum to 100) + computed inspection score from inspector submission.
+ * Positive / good outcomes earn full row weight; negative / defect outcomes earn a reduced fraction
+ * (default 50%) so the total still aggregates to /100.
  */
+
+/** Fraction of this row's weight when inspector picks a negative / defect outcome (still “counts”, but low). */
+const NEGATIVE_LINE_CREDIT = 0.5;
 
 function inspectorCaptureMode(field) {
   const ft = String(field.fieldType || '')
@@ -15,36 +20,95 @@ function inspectorCaptureMode(field) {
   return 'none';
 }
 
-function conditionCountsAsPass(conditionStr, conditionOptions) {
-  const c = String(conditionStr || '')
+function normalizeToken(s) {
+  return String(s || '')
     .trim()
-    .toLowerCase();
-  if (!c) return false;
-  const opts = (conditionOptions || []).map((x) => String(x || '').trim().toLowerCase()).filter(Boolean);
-  if (opts.length && opts[0] === c) return true;
-  if (/^(ok|pass|passed|yes|y|na|n\/a)$/.test(c)) return true;
-  if (/^(nok|not ok|not\s*ok|fail|failed|no)$/.test(c)) return false;
-  const idx = opts.indexOf(c);
-  if (idx >= 0) return idx === 0;
-  return false;
+    .toLowerCase()
+    .replace(/\s+/g, ' ');
 }
 
-function fieldPassesScore(item, submittedRow) {
-  if (!submittedRow) return false;
+/**
+ * Quality multiplier for one row in [0, 1]: 1 = full marks for that row's weight, NEGATIVE_LINE_CREDIT = partial.
+ */
+function outcomeFractionFromCondition(conditionStr, conditionOptions) {
+  const raw = String(conditionStr || '').trim();
+  if (!raw) return null;
+
+  const opts = (conditionOptions || []).map((x) => String(x || '').trim()).filter(Boolean);
+  const c = normalizeToken(raw);
+
+  // NA — does not penalize
+  if (/^(na|n\/a|not applicable|none)$/i.test(c)) return 1;
+
+  // Explicit negative wording (matches common inspector labels)
+  const negativeWord =
+    /\b(nok|not\s*ok|not ok|fail|failed|bad|poor|reject|damaged|defect|major\b|minor\b)/i.test(raw) ||
+    /\b(not\s*good|no\s*good)\b/i.test(raw);
+  if (negativeWord) return NEGATIVE_LINE_CREDIT;
+
+  // Explicit positive
+  const positiveWord =
+    /^(ok|pass|passed|yes|good|perfect|excellent|great|fine|clear|satisfactory)$/i.test(c) ||
+    /\b(ok|good|perfect|pass|fine|clear|excellent|great|satisfactory)\b/i.test(raw);
+  if (positiveWord) return 1;
+
+  const lowerOpts = opts.map((o) => normalizeToken(o));
+  const idx = lowerOpts.indexOf(c);
+  if (idx >= 0) {
+    const lab = opts[idx];
+    const labN = normalizeToken(lab);
+    if (/^(na|n\/a|not applicable)$/i.test(labN)) return 1;
+    // First listed option is treated as the “best” (full marks) when not NA
+    if (idx === 0) return 1;
+    // Any other listed outcome = reduced marks (e.g. 2nd option NOT OK)
+    return NEGATIVE_LINE_CREDIT;
+  }
+
+  // Unknown free text in condition — slight uncertainty
+  if (/\b(ok|good|perfect|pass)\b/i.test(raw)) return 1;
+  if (/\b(bad|fail|poor|damage|broken)\b/i.test(raw)) return NEGATIVE_LINE_CREDIT;
+  return 0.85;
+}
+
+function outcomeFractionFromNotes(notesStr) {
+  const t = String(notesStr || '').trim();
+  if (!t) return null;
+  const lower = t.toLowerCase();
+
+  const negative =
+    /\b(not\s*good|not\s*ok|nok|fail|failed|bad|poor|damaged|broken|crack|reject|defect|major\s+issue|minor\s+issue)\b/i.test(
+      lower,
+    );
+  const positive =
+    /\b(ok|good|perfect|pass|passed|fine|clear|excellent|great|satisfactory|healthy|no\s*damage)\b/i.test(lower);
+
+  if (negative && !positive) return NEGATIVE_LINE_CREDIT;
+  if (positive) return 1;
+  // Neutral / descriptive — full credit when minimum evidence is present
+  return 1;
+}
+
+/**
+ * Combined [0,1] multiplier for the row after evidence requirements (photos, etc.).
+ */
+function rowQualityFraction(item, submittedRow) {
+  if (!submittedRow) return 0;
   const mode = inspectorCaptureMode(item);
   const imgs = Array.isArray(submittedRow.images) ? submittedRow.images.length : 0;
   const minP = item.required ? Math.max(0, Number(item.minPhotos) || 0) : 0;
-  if (imgs < minP) return false;
+  if (imgs < minP) return 0;
 
   if (mode === 'text') {
     const notes = String(submittedRow.notes || '').trim();
-    if (item.required && !notes) return false;
-    return true;
+    if (item.required && !notes) return 0;
+    const q = outcomeFractionFromNotes(notes);
+    return q == null ? 0 : q;
   }
   if (mode === 'dropdown') {
-    return conditionCountsAsPass(submittedRow.condition, item.conditionOptions);
+    const q = outcomeFractionFromCondition(submittedRow.condition, item.conditionOptions);
+    return q == null ? 0 : q;
   }
-  return true;
+  return 1;
 }
 
 function cloneField(f) {
@@ -53,7 +117,6 @@ function cloneField(f) {
 
 /**
  * Normalize scoreWeight on each row so weights sum to 100.
- * Empty weights share the remainder equally after explicit weights are applied.
  */
 function normalizeChecklistScoreWeights(fields) {
   if (!Array.isArray(fields) || !fields.length) return fields;
@@ -104,9 +167,10 @@ function computeInspectionScore(checklist, submission) {
     const sid = String(item.id || '');
     const sub = subMap.get(sid);
     const w = Number(item.scoreWeight) || 0;
-    const pass = fieldPassesScore(item, sub);
-    const e = pass ? w : 0;
+    const q = rowQualityFraction(item, sub);
+    const e = w * q;
     earned += e;
+    const pass = q >= 1 - 1e-9;
     breakdown.push({
       fieldId: sid,
       label: String(item.label || item.checklistTitle || sid).slice(0, 220),
@@ -114,10 +178,16 @@ function computeInspectionScore(checklist, submission) {
       earned: Math.round(e * 100) / 100,
       pass,
       condition: sub?.condition != null ? String(sub.condition) : '',
+      qualityFraction: Math.round(q * 1000) / 1000,
     });
   }
   const score = Math.min(100, Math.round(earned * 100) / 100);
   return { score, breakdown };
+}
+
+/** @deprecated use rowQualityFraction — kept for callers expecting boolean pass/fail */
+function fieldPassesScore(item, submittedRow) {
+  return rowQualityFraction(item, submittedRow) >= 1 - 1e-9;
 }
 
 module.exports = {
@@ -125,4 +195,5 @@ module.exports = {
   computeInspectionScore,
   fieldPassesScore,
   inspectorCaptureMode,
+  NEGATIVE_LINE_CREDIT,
 };

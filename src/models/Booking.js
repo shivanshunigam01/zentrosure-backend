@@ -62,7 +62,9 @@ const SCORE_BREAKDOWN_ROW = new mongoose.Schema({
   weight: Number,
   earned: Number,
   pass: Boolean,
-  condition: String
+  condition: String,
+  /** 0–1 multiplier applied to this row's weight (1 = full, ~0.5 = negative/partial). */
+  qualityFraction: Number
 }, { _id: false });
 
 const REPORT_DATA = new mongoose.Schema({
