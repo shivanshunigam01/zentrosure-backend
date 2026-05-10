@@ -24,7 +24,7 @@ const CHECKLIST_FIELD = new mongoose.Schema({
   },
   /** Inspector can write a free-text remark for this row. */
   enableRemarks: { type: Boolean, default: true },
-  /** Share of total certificate score (weights normalized to sum 100 per checklist). */
+  /** Legacy stored weight; scoring uses equal 100/N per checklist row. */
   scoreWeight: { type: Number, default: null }
 }, { _id: false });
 

@@ -1,7 +1,7 @@
 /**
- * Checklist score weights (sum to 100) + computed inspection score from inspector submission.
- * Positive / good outcomes earn full row weight; negative / defect outcomes earn a reduced fraction
- * (default 50%) so the total still aggregates to /100.
+ * Certificate score: every checklist line counts equally toward /100.
+ * Score = average(row quality) × 100, where each row’s quality is 0–1 (good/OK = 1, defects = reduced credit).
+ * Row count N comes from the admin template (e.g. 140 lines → each line worth 100/N points if perfect).
  */
 
 /** Fraction of this row's weight when inspector picks a negative / defect outcome (still “counts”, but low). */
@@ -48,8 +48,8 @@ function outcomeFractionFromCondition(conditionStr, conditionOptions) {
 
   // Explicit positive
   const positiveWord =
-    /^(ok|pass|passed|yes|good|perfect|excellent|great|fine|clear|satisfactory)$/i.test(c) ||
-    /\b(ok|good|perfect|pass|fine|clear|excellent|great|satisfactory)\b/i.test(raw);
+    /^(ok|pass|passed|yes|good|okay|perfect|excellent|great|fine|clear|satisfactory)$/i.test(c) ||
+    /\b(ok|okay|good|perfect|pass|fine|clear|excellent|great|satisfactory)\b/i.test(raw);
   if (positiveWord) return 1;
 
   const lowerOpts = opts.map((o) => normalizeToken(o));
@@ -80,7 +80,7 @@ function outcomeFractionFromNotes(notesStr) {
       lower,
     );
   const positive =
-    /\b(ok|good|perfect|pass|passed|fine|clear|excellent|great|satisfactory|healthy|no\s*damage)\b/i.test(lower);
+    /\b(ok|okay|good|perfect|pass|passed|fine|clear|excellent|great|satisfactory|healthy|no\s*damage)\b/i.test(lower);
 
   if (negative && !positive) return NEGATIVE_LINE_CREDIT;
   if (positive) return 1;
@@ -116,65 +116,43 @@ function cloneField(f) {
 }
 
 /**
- * Normalize scoreWeight on each row so weights sum to 100.
+ * Persist equal scoreWeight per row (100/N) for exports / legacy readers. Scoring uses the same rule in computeInspectionScore.
  */
 function normalizeChecklistScoreWeights(fields) {
   if (!Array.isArray(fields) || !fields.length) return fields;
   const n = fields.length;
-  const parsed = fields.map((f) => {
-    const v = f.scoreWeight;
-    if (v == null || v === '') return { raw: null };
-    const num = Number(v);
-    if (!Number.isFinite(num) || num < 0) return { raw: null };
-    return { raw: Math.min(100, num) };
-  });
-  const nullCount = parsed.filter((x) => x.raw == null).length;
-  if (nullCount === n) {
-    const eq = 100 / n;
-    return fields.map((f) => ({
-      ...cloneField(f),
-      scoreWeight: Math.round(eq * 10000) / 10000,
-    }));
-  }
-  const explicitSum = parsed.reduce((a, x) => a + (x.raw != null ? x.raw : 0), 0);
-  const remainder = Math.max(0, 100 - explicitSum);
-  const perNull = nullCount > 0 ? remainder / nullCount : 0;
-  const adjusted = parsed.map((x) => (x.raw != null ? x.raw : perNull));
-  const sum2 = adjusted.reduce((a, b) => a + b, 0);
-  if (sum2 <= 0) {
-    const eq = 100 / n;
-    return fields.map((f) => ({
-      ...cloneField(f),
-      scoreWeight: Math.round(eq * 10000) / 10000,
-    }));
-  }
-  return fields.map((f, i) => ({
+  const eq = 100 / n;
+  const w = Math.round(eq * 10000) / 10000;
+  return fields.map((f) => ({
     ...cloneField(f),
-    scoreWeight: Math.round((adjusted[i] / sum2) * 10000) / 10000,
+    scoreWeight: w,
   }));
 }
 
 function computeInspectionScore(checklist, submission) {
-  const fields = Array.isArray(checklist) ? checklist.map(cloneField) : [];
-  const normalized = normalizeChecklistScoreWeights(fields);
+  const fields = Array.isArray(checklist) ? checklist : [];
+  const n = fields.length;
   const subMap = new Map();
   for (const row of submission?.fields || []) {
     subMap.set(String(row.fieldId), row);
   }
   const breakdown = [];
+  if (!n) {
+    return { score: 0, breakdown };
+  }
+  const perRowMax = 100 / n;
   let earned = 0;
-  for (const item of normalized) {
+  for (const item of fields) {
     const sid = String(item.id || '');
     const sub = subMap.get(sid);
-    const w = Number(item.scoreWeight) || 0;
     const q = rowQualityFraction(item, sub);
-    const e = w * q;
+    const e = perRowMax * q;
     earned += e;
     const pass = q >= 1 - 1e-9;
     breakdown.push({
       fieldId: sid,
       label: String(item.label || item.checklistTitle || sid).slice(0, 220),
-      weight: Math.round(w * 100) / 100,
+      weight: Math.round(perRowMax * 100) / 100,
       earned: Math.round(e * 100) / 100,
       pass,
       condition: sub?.condition != null ? String(sub.condition) : '',

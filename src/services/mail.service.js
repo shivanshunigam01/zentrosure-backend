@@ -41,11 +41,11 @@ function wrapBrandedEmailHtml({ preheader, innerHtml }) {
       <td align="center">
         <table role="presentation" cellpadding="0" cellspacing="0" width="600" style="max-width:600px;width:100%;border-collapse:collapse;">
           <tr>
-            <td style="background-color:#102237;border-radius:12px 12px 0 0;padding:20px 24px;">
+            <td style="background-color:#102237;border-radius:12px 12px 0 0;padding:22px 24px;">
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
                 <tr>
                   <td valign="middle" style="padding:0;">
-                    <img src="${logo}" alt="ZentroSure" width="140" height="auto" style="display:block;max-width:140px;height:auto;border:0;" />
+                    <img src="${logo}" alt="ZentroSure" width="220" height="auto" style="display:block;max-width:220px;height:auto;border:0;" />
                   </td>
                   <td align="right" valign="middle" style="font-size:13px;color:#94a3b8;">
                     Vehicle inspection
